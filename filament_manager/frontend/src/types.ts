@@ -25,6 +25,23 @@ export interface Spool {
   cost_per_gram: number | null
   created_at: string
   updated_at: string
+  bambu_spool_id: string | null
+  bambu_synced_at: string | null
+}
+
+export interface FilamentSyncStatus {
+  enabled: boolean
+  direction: 'pull' | 'push' | 'bidirectional'
+  last_sync_at: string | null
+  total_spools: number
+  linked_spools: number
+}
+
+export interface FilamentSyncResult {
+  created: number
+  updated: number
+  unchanged: number
+  errors: number
 }
 
 export interface PrintUsage {

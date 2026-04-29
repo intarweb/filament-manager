@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import type { Spool, BrandSpoolWeight, FilamentCatalog, SpoolAuditEntry } from '../types'
-import { Plus, Pencil, Trash2, X, LayoutGrid, Table2, ChevronUp, ChevronDown, ChevronsUpDown, Copy, History, RotateCcw, Archive, ArchiveRestore, Columns3 } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, LayoutGrid, Table2, ChevronUp, ChevronDown, ChevronsUpDown, Copy, History, RotateCcw, Archive, ArchiveRestore, Columns3, Cloud } from 'lucide-react'
 import Modal from '../components/Modal'
 import { formatDateOnly } from '../utils/time'
 
@@ -499,9 +499,17 @@ function SpoolCard({ spool, onEdit, onDuplicate, onHistory, onDelete, onArchive,
               {spool.subtype2 ? ` · ${spool.subtype2}` : ''}
             </p>
             <p className="text-xs text-gray-400">{spool.color_name}</p>
-            {spool.archived && (
-              <span className="text-xs text-gray-500 italic">{t('spools.archived')}</span>
-            )}
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              {spool.archived && (
+                <span className="text-xs text-gray-500 italic">{t('spools.archived')}</span>
+              )}
+              {spool.bambu_spool_id && (
+                <span className="inline-flex items-center gap-0.5 text-[10px] px-1 py-0.5 rounded bg-blue-900/40 border border-blue-700/60 text-blue-400"
+                  title={t('spools.bambuLinked')}>
+                  <Cloud size={9} />{t('spools.bambuLinked')}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-0.5 shrink-0 ml-2">
@@ -728,7 +736,7 @@ function SpoolTable({ spools, onEdit, onDuplicate, onHistory, onDelete, onArchiv
       case 'brand':            return <td key={c.key} className="px-3 py-2 font-medium text-white whitespace-nowrap">{s.brand}</td>
       case 'material':         return <td key={c.key} className="px-3 py-2 whitespace-nowrap">{s.material}</td>
       case 'subtype':          return <td key={c.key} className="px-3 py-2 whitespace-nowrap text-gray-300">{[s.subtype, s.subtype2].filter(Boolean).join(' · ') || '—'}</td>
-      case 'color_name':       return <td key={c.key} className="px-3 py-2 whitespace-nowrap"><span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: s.color_hex }} />{s.color_name}</span></td>
+      case 'color_name':       return <td key={c.key} className="px-3 py-2 whitespace-nowrap"><span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: s.color_hex }} />{s.color_name}{s.bambu_spool_id && <Cloud size={10} className="text-blue-400 shrink-0" title={t('spools.bambuLinked')} />}</span></td>
       case 'article_number':   return <td key={c.key} className="px-3 py-2 whitespace-nowrap text-gray-400 font-mono">{s.article_number ?? '—'}</td>
       case 'remaining_pct':    return <td key={c.key} className="px-3 py-2 whitespace-nowrap"><div className="flex items-center gap-2"><div className="w-16 h-1.5 rounded-full bg-surface-3 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: barColor }} /></div><span style={{ color: barColor }}>{pct}%</span></div></td>
       case 'current_weight_g': return <td key={c.key} className="px-3 py-2 whitespace-nowrap text-gray-300">{(s.current_weight_g / 1000).toFixed(3)} kg</td>

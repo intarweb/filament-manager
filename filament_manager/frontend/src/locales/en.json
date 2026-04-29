@@ -170,6 +170,7 @@
     "archived": "Archived",
     "showArchived": "Show archived",
     "hideArchived": "Hide archived",
+    "bambuLinked": "Bambu",
     "audit": {
       "title": "Weight History — {{brand}} {{color}}",
       "noEntries": "No weight changes recorded yet.",
@@ -347,6 +348,25 @@
       "regionEU": "Europe",
       "regionCN": "China",
       "configureInExperiments": "Configure cloud source in the Cloud Config tab",
+    "filamentSync": {
+      "title": "Filament Sync",
+      "hint": "Keep your spool inventory in sync with the Bambu Lab filament library.",
+      "requiresCloud": "Connect to Bambu Cloud first to enable sync.",
+      "direction": "Sync direction",
+      "dir_pull": "Pull",
+      "dir_push": "Push",
+      "dir_bidirectional": "Both",
+      "dirHint_pull": "Bambu Cloud → local: import cloud spools, update local matches.",
+      "dirHint_push": "Local → Bambu Cloud: push your inventory to the cloud.",
+      "dirHint_bidirectional": "Both directions: pull from cloud, then push local spools.",
+      "linked": "{{n}} of {{total}} spools linked to Bambu Cloud",
+      "lastSync": "Last sync: {{date}}",
+      "pullNow": "Pull from Cloud",
+      "pushNow": "Push to Cloud",
+      "op_pull": "Pull",
+      "op_push": "Push",
+      "result": "{{op}} complete — {{created}} created, {{updated}} updated, {{unchanged}} unchanged, {{errors}} errors"
+    },
       "notConnectedHint": "Not connected to Bambu Lab Cloud. Go to the Cloud Config tab to connect first.",
       "selectDevice": "Select your printer",
       "serial": "Serial"

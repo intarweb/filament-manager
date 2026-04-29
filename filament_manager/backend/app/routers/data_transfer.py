@@ -60,6 +60,7 @@ def _spool_dict(s: Spool) -> dict:
         "ams_slot": s.ams_slot,
         "notes": s.notes,
         "archived": s.archived,
+        "bambu_spool_id": s.bambu_spool_id,
         "created_at": _dt(s.created_at),
     }
 
@@ -711,6 +712,7 @@ def import_data(bundle: ImportBundle, db: Session = Depends(get_db)):
             ams_slot=sp.get("ams_slot"),
             notes=sp.get("notes"),
             archived=sp.get("archived", False),
+            bambu_spool_id=sp.get("bambu_spool_id"),
             created_at=_parse_dt(sp.get("created_at")) or datetime.utcnow(),
         )
         db.add(new_spool)

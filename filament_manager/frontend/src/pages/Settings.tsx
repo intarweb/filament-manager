@@ -6,6 +6,7 @@ import type { PrinterConfig, AMSTray, Spool, BrandSpoolWeight, FilamentSubtype, 
 import { Plus, Trash2, X, RefreshCw, CheckCircle, AlertCircle, Pencil, ChevronDown, ChevronUp, ChevronsUpDown, Download, Upload, Wifi, WifiOff, Sparkles } from 'lucide-react'
 import Modal from '../components/Modal'
 import BambuCloudSection from '../components/BambuCloudSection'
+import FilamentSyncSection from '../components/FilamentSyncSection'
 import { findBestSpoolMatch } from '../utils/amsMatch'
 
 // ── Cloud Printer Form ────────────────────────────────────────────────────────
@@ -2473,6 +2474,14 @@ export default function Settings() {
             </div>
             <p className="text-xs text-gray-500 mb-4">{t('settings.bambuCloud.hint')}</p>
             <BambuCloudSection />
+          </div>
+
+          <div className="card">
+            <div className="flex items-center gap-2 mb-3">
+              <h3 className="text-sm font-semibold text-gray-300">{t('settings.filamentSync.title')}</h3>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-900/40 border border-yellow-700 text-yellow-400">{t('common.experimental')}</span>
+            </div>
+            <FilamentSyncSection isCloudConnected={isCloudConnected} />
           </div>
 
           {isCloudConnected && cloudPrinters.length > 0 && (

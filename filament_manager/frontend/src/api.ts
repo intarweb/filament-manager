@@ -15,7 +15,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 // ── Spools ───────────────────────────────────────────────────────────────────
-import type { Spool, PrintJob, PrinterConfig, PrinterStatus, DashboardStats, FilamentSubtype, Project, ProjectDetail } from './types'
+import type { Spool, PrintJob, PrinterConfig, PrinterStatus, DashboardStats, FilamentSubtype, Project, ProjectDetail, FilamentSyncStatus, FilamentSyncResult } from './types'
 
 export const api = {
   // Spools
@@ -216,6 +216,15 @@ export const api = {
     request<{ ok: boolean; imported: number; skipped: number; total: number }>('bambu-cloud/import-prints', { method: 'POST' }),
   getBambuCloudPrinterAMS: (serial: string) =>
     request<{ slot_key: string; ha_material: string | null; ha_color_hex: string | null; ha_remaining: string | null }[]>(`bambu-cloud/printer/${serial}/ams`),
+
+  // Filament Sync
+  getFilamentSyncStatus: () => request<FilamentSyncStatus>('filament-sync/status'),
+  patchFilamentSyncSettings: (data: { enabled: boolean; direction: string }) =>
+    request<FilamentSyncStatus>('filament-sync/settings', { method: 'PATCH', body: JSON.stringify(data) }),
+  filamentSyncPull: () =>
+    request<FilamentSyncResult>('filament-sync/pull', { method: 'POST' }),
+  filamentSyncPush: () =>
+    request<FilamentSyncResult>('filament-sync/push', { method: 'POST' }),
 
   // Data transfer
   exportData: () => fetch(`${BASE}/data/export`).then(r => r.blob()),

@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
 from .database import engine, Base
-from .routers import spools, prints, printers, dashboard, app_settings, data_transfer, bambu_cloud, projects
+from .routers import spools, prints, printers, dashboard, app_settings, data_transfer, bambu_cloud, projects, filament_sync
 from . import bambu_cloud_client
 
 logging.basicConfig(level=logging.INFO)
@@ -80,6 +80,16 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE spools ADD COLUMN last_dried_at DATETIME"))
             conn.commit()
             log.info("Migration: added spools.last_dried_at")
+
+        # spools: add Bambu filament sync fields
+        if "bambu_spool_id" not in spool_cols:
+            conn.execute(text("ALTER TABLE spools ADD COLUMN bambu_spool_id TEXT"))
+            conn.commit()
+            log.info("Migration: added spools.bambu_spool_id")
+        if "bambu_synced_at" not in spool_cols:
+            conn.execute(text("ALTER TABLE spools ADD COLUMN bambu_synced_at DATETIME"))
+            conn.commit()
+            log.info("Migration: added spools.bambu_synced_at")
 
         # spools: add archived flag if missing
         if "archived" not in spool_cols:
@@ -288,6 +298,26 @@ async def lifespan(app: FastAPI):
             conn.commit()
             log.info("Migration: added user_preferences.low_stock_threshold_pct")
 
+        # user_preferences: add Bambu filament sync settings
+        if up_cols and "bambu_filament_sync_enabled" not in up_cols:
+            conn.execute(text(
+                "ALTER TABLE user_preferences ADD COLUMN bambu_filament_sync_enabled INTEGER NOT NULL DEFAULT 0"
+            ))
+            conn.commit()
+            log.info("Migration: added user_preferences.bambu_filament_sync_enabled")
+        if up_cols and "bambu_filament_sync_direction" not in up_cols:
+            conn.execute(text(
+                "ALTER TABLE user_preferences ADD COLUMN bambu_filament_sync_direction TEXT NOT NULL DEFAULT 'pull'"
+            ))
+            conn.commit()
+            log.info("Migration: added user_preferences.bambu_filament_sync_direction")
+        if up_cols and "bambu_filament_last_sync_at" not in up_cols:
+            conn.execute(text(
+                "ALTER TABLE user_preferences ADD COLUMN bambu_filament_last_sync_at DATETIME"
+            ))
+            conn.commit()
+            log.info("Migration: added user_preferences.bambu_filament_last_sync_at")
+
         # spools: rename German color names to English
         _COLOR_RENAMES = {
             "Schwarz": "Black", "Weiß": "White", "Grau": "Gray",
@@ -429,6 +459,7 @@ app.include_router(dashboard.router)
 app.include_router(app_settings.router)
 app.include_router(data_transfer.router)
 app.include_router(bambu_cloud.router)
+app.include_router(filament_sync.router)
 
 # Serve React frontend
 # In container: __file__ = /app/app/main.py → parent.parent = /app → /app/static

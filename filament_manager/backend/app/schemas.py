@@ -65,6 +65,8 @@ class SpoolOut(SpoolBase):
     cost_per_gram: float | None
     created_at: datetime
     updated_at: datetime
+    bambu_spool_id: str | None = None
+    bambu_synced_at: datetime | None = None
 
 
 # ── PrintUsage ───────────────────────────────────────────────────────────────

@@ -52,6 +52,11 @@ _2FA_TIMEOUT_SECONDS = 600  # 10 minutes
 
 _AUTH_BASE = "https://api.bambulab.com/v1/user-service/user"
 _IOT_BASE  = "https://api.bambulab.com/v1/iot-service/api"
+_FILAMENT_BASE: dict[str, str] = {
+    "us": "https://api.bambulab.com/v1/user-service",
+    "eu": "https://api.bambulab.com/v1/user-service",
+    "cn": "https://api.bambulab.cn/v1/user-service",
+}
 MQTT_HOSTS: dict[str, str] = {
     "us": "us.mqtt.bambulab.com",
     "eu": "eu.mqtt.bambulab.com",
@@ -765,6 +770,140 @@ def _start_mqtt_for_serial(serial: str, email: str, token: str) -> None:
         log.info("Bambu Cloud MQTT client started for serial %s", serial)
     except Exception as exc:
         log.error("Failed to start MQTT for %s: %s", serial, exc)
+
+
+# ── Filament cloud REST helpers ───────────────────────────────────────────────
+
+def _filament_base() -> str:
+    """Return the correct base URL for the filament API based on saved region."""
+    creds = _load_credentials()
+    region = (creds or {}).get("region", "us")
+    return _FILAMENT_BASE.get(region, _FILAMENT_BASE["us"])
+
+
+def _http_list_filaments(token: str, offset: int = 0, limit: int = 50) -> dict:
+    """GET /my/filament/v2 — returns { total, hits: [...] }."""
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(
+        f"{_filament_base()}/my/filament/v2",
+        params={"offset": offset, "limit": limit},
+        headers=headers,
+        timeout=20,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _http_list_all_filaments(token: str) -> list[dict]:
+    """Paginate through all filament spools and return full list."""
+    all_hits: list[dict] = []
+    offset = 0
+    limit = 50
+    while True:
+        data = _http_list_filaments(token, offset=offset, limit=limit)
+        hits = data.get("hits") or data.get("data", {}).get("hits") or []
+        if not hits:
+            break
+        all_hits.extend(hits)
+        total = int(data.get("total") or data.get("data", {}).get("total") or 0)
+        offset += len(hits)
+        if offset >= total:
+            break
+    return all_hits
+
+
+def _http_create_filament(token: str, body: dict) -> dict:
+    """POST /my/filament/v2 — create a new cloud spool. Returns created spool JSON."""
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.post(
+        f"{_filament_base()}/my/filament/v2",
+        json=body,
+        headers=headers,
+        timeout=20,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _http_update_filament(token: str, spool_id: str | int, body: dict) -> dict:
+    """PUT /my/filament/v2/:id — update an existing cloud spool."""
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.put(
+        f"{_filament_base()}/my/filament/v2/{spool_id}",
+        json=body,
+        headers=headers,
+        timeout=20,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _http_delete_filaments(token: str, ids: list[int], rfids: list[str] | None = None) -> None:
+    """DELETE /my/filament/v2/batch — delete one or more cloud spools by id."""
+    headers = {"Authorization": f"Bearer {token}"}
+    body: dict = {"ids": ids}
+    if rfids:
+        body["RFIDs"] = rfids
+    resp = requests.delete(
+        f"{_filament_base()}/my/filament/v2/batch",
+        json=body,
+        headers=headers,
+        timeout=20,
+    )
+    resp.raise_for_status()
+
+
+def _http_get_filament_config() -> dict:
+    """GET /filament/config — public endpoint, no auth required."""
+    resp = requests.get(
+        f"{_filament_base()}/filament/config",
+        timeout=20,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+# ── Filament sync async wrappers ──────────────────────────────────────────────
+
+async def list_all_filaments() -> list[dict]:
+    """Async: fetch all cloud filament spools. Returns empty list if not connected."""
+    creds = _load_credentials()
+    if not creds or not creds.get("token"):
+        raise HTTPException(503, "Not connected to Bambu Cloud")
+    token = creds["token"]
+    try:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, lambda: _http_list_all_filaments(token))
+    except requests.HTTPError as exc:
+        raise HTTPException(502, f"Bambu filament list failed: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(502, f"Bambu filament list failed: {exc}") from exc
+
+
+async def create_filament(body: dict) -> dict:
+    """Async: create a cloud spool."""
+    creds = _load_credentials()
+    if not creds or not creds.get("token"):
+        raise HTTPException(503, "Not connected to Bambu Cloud")
+    token = creds["token"]
+    try:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, lambda: _http_create_filament(token, body))
+    except requests.HTTPError as exc:
+        raise HTTPException(502, f"Bambu filament create failed: {exc}") from exc
+
+
+async def update_filament(spool_id: str | int, body: dict) -> dict:
+    """Async: update a cloud spool."""
+    creds = _load_credentials()
+    if not creds or not creds.get("token"):
+        raise HTTPException(503, "Not connected to Bambu Cloud")
+    token = creds["token"]
+    try:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, lambda: _http_update_filament(token, spool_id, body))
+    except requests.HTTPError as exc:
+        raise HTTPException(502, f"Bambu filament update failed: {exc}") from exc
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

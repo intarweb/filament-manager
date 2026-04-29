@@ -170,6 +170,7 @@
     "archived": "Archiviert",
     "showArchived": "Archivierte anzeigen",
     "hideArchived": "Archivierte ausblenden",
+    "bambuLinked": "Bambu",
     "audit": {
       "title": "Gewichtsverlauf — {{brand}} {{color}}",
       "noEntries": "Noch keine Gewichtsänderungen aufgezeichnet.",
@@ -349,7 +350,26 @@
       "configureInExperiments": "Cloud-Quelle im Tab Cloud-Konfiguration konfigurieren",
       "notConnectedHint": "Nicht mit Bambu Lab Cloud verbunden. Verbinde dich zuerst im Tab Cloud-Konfiguration.",
       "selectDevice": "Drucker auswählen",
-      "serial": "Seriennummer"
+      "serial": "Seriennummer",
+      "filamentSync": {
+        "title": "Filament-Synchronisation",
+        "hint": "Hält dein Spuleninventar mit der Bambu Lab Filamentbibliothek synchron.",
+        "requiresCloud": "Verbinde dich zuerst mit der Bambu Cloud, um die Synchronisation zu aktivieren.",
+        "direction": "Synchronisationsrichtung",
+        "dir_pull": "Holen",
+        "dir_push": "Senden",
+        "dir_bidirectional": "Beides",
+        "dirHint_pull": "Bambu Cloud → lokal: Cloud-Spulen importieren, lokale Einträge aktualisieren.",
+        "dirHint_push": "Lokal → Bambu Cloud: dein Inventar in die Cloud übertragen.",
+        "dirHint_bidirectional": "Beide Richtungen: von Cloud holen, dann lokale Spulen senden.",
+        "linked": "{{n}} von {{total}} Spulen mit Bambu Cloud verknüpft",
+        "lastSync": "Letzte Synchronisation: {{date}}",
+        "pullNow": "Von Cloud holen",
+        "pushNow": "In Cloud senden",
+        "op_pull": "Holen",
+        "op_push": "Senden",
+        "result": "{{op}} abgeschlossen — {{created}} erstellt, {{updated}} aktualisiert, {{unchanged}} unverändert, {{errors}} Fehler"
+      }
     },
     "ha": {
       "title": "Home Assistant",

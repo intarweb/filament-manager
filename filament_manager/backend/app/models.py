@@ -46,6 +46,8 @@ class Spool(Base):
     article_number = Column(String, nullable=True)
     last_dried_at = Column(DateTime, nullable=True)
     ams_slot = Column(String)
+    bambu_spool_id = Column(String, nullable=True)   # Bambu Cloud filament spool ID (int64 stored as str)
+    bambu_synced_at = Column(DateTime, nullable=True)  # last successful Bambu sync timestamp
     notes = Column(Text)
     archived = Column(Boolean, default=False, nullable=False, server_default='0')
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -286,6 +288,10 @@ class UserPreferences(Base):
     currency_override       = Column(String,  nullable=True)   # ISO 4217, e.g. "EUR"
     country_override        = Column(String,  nullable=True)   # ISO 3166-1 alpha-2, e.g. "DE"
     low_stock_threshold_pct = Column(Integer, nullable=False, default=20)  # 1–100
+    # Bambu Filament Sync settings
+    bambu_filament_sync_enabled   = Column(Boolean, nullable=False, default=False)
+    bambu_filament_sync_direction = Column(String,  nullable=False, default='pull')  # 'pull' | 'push' | 'bidirectional'
+    bambu_filament_last_sync_at   = Column(DateTime, nullable=True)
 
 
 class PrinterConfig(Base):

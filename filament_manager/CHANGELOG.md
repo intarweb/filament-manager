@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.36.0
+
+- New: **Bambu Lab Filament Sync** (Experimental) — synchronise your spool inventory with the Bambu Lab filament library; supports pull (cloud → local), push (local → cloud), and bidirectional modes; synced spools are shown with a cloud badge in the spool grid and table; configure in Settings → Cloud Config → Filament Sync
+
 ## 0.35.1
 
 - New: **URL field on projects** — each project can have an optional URL (MakerWorld, Printables, etc.); shown as a clickable link icon next to the project name; set in the create/edit project form (issue #47)
