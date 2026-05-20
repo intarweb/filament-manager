@@ -130,16 +130,16 @@ class PrintJob(Base):
     print_type = Column(String, nullable=True)     # "cloud", "local", "sdcard"
     error_code = Column(String, nullable=True)     # mc_print_error_code on failure
     print_weight_g = Column(Float, nullable=True)  # total filament weight (g) reported by printer/cloud
-    suggested_usages = Column(JSON, nullable=True)  # cloud-sourced per-tray usage hints [{ams_slot, grams, filament_type, color}]
+    suggested_usages = Column(JSON(none_as_null=True), nullable=True)  # cloud-sourced per-tray usage hints [{ams_slot, grams, filament_type, color}]
     design_title = Column(String, nullable=True)   # MakerWorld/cloud model name (designTitle field from Bambu)
     url = Column(String, nullable=True)            # user-set URL for the model/print source
     energy_kwh       = Column(Float, nullable=True)  # kWh consumed during this print (from HA sensor delta)
     energy_cost      = Column(Float, nullable=True)  # energy cost in € (energy_kwh × price/kWh)
     energy_start_kwh = Column(Float, nullable=True)  # HA energy sensor reading at print start (persisted for restart recovery)
     # {slot_key: {spool_id, weight_g, material, color}} — spool identity + weight captured at print start
-    ams_spool_snapshot = Column(JSON, nullable=True)
+    ams_spool_snapshot = Column(JSON(none_as_null=True), nullable=True)
     # [slot_key, ...] — physical AMS slots active during the print (for auto-switch split detection)
-    ams_active_trays = Column(JSON, nullable=True)
+    ams_active_trays = Column(JSON(none_as_null=True), nullable=True)
     fm_project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
 
     project = relationship("Project", back_populates="print_jobs")

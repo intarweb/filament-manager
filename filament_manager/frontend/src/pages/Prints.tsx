@@ -481,10 +481,12 @@ function LogUsageModal({
   job,
   onSave,
   onCancel,
+  onEdit,
 }: {
   job: PrintJob
   onSave: (usages: { spool_id: number; grams_used: number; ams_slot: string }[]) => void
   onCancel: () => void
+  onEdit: () => void
 }) {
   const { t } = useTranslation()
 
@@ -500,7 +502,7 @@ function LogUsageModal({
   })
   const printer = printers.find(p => p.name === job.printer_name) ?? null
   const needsFallback = (job.suggested_usages ?? []).some(s => s.spool_id == null)
-  const { data: trays = [] } = useQuery<AMSTray[]>({
+  const { data: trays = [], isLoading: traysLoading } = useQuery<AMSTray[]>({
     queryKey: ['printer-ams', printer?.id],
     queryFn: () => api.getPrinterAMS(printer!.id),
     enabled: !!printer && needsFallback,
@@ -508,6 +510,12 @@ function LogUsageModal({
   const traysBySlot = Object.fromEntries(trays.map(t => [t.slot_key, t]))
 
   const suggestions = job.suggested_usages ?? []
+
+  const hasUnresolved = !traysLoading && suggestions.some(s =>
+    s.spool_id
+      ? !spools.some(sp => sp.id === s.spool_id)
+      : !traysBySlot[s.ams_slot]?.spool
+  )
 
   // Grams state keyed by index (not ams_slot) — swap scenario has two entries for same slot
   const [grams, setGrams] = useState<Record<number, string>>(() =>
@@ -551,7 +559,12 @@ function LogUsageModal({
           </p>
 
           {suggestions.length === 0 && (
-            <p className="text-sm text-gray-500">{t('prints.form.noAMSAssigned')}</p>
+            <div className="space-y-3">
+              <p className="text-sm text-gray-400">{t('prints.noCloudData')}</p>
+              <button className="btn-secondary w-full" onClick={onEdit}>
+                {t('prints.logManually')}
+              </button>
+            </div>
           )}
 
           {Object.entries(grouped).map(([slot, entries]) => {
@@ -597,12 +610,15 @@ function LogUsageModal({
                             </p>
                           </>
                         ) : (
-                          <p className="text-sm text-gray-400">
-                            {slot}
-                            {swapLabel && (
-                              <span className="ml-1.5 text-xs text-amber-400">({swapLabel})</span>
-                            )}
-                          </p>
+                          <div>
+                            <p className="text-sm text-gray-400">
+                              {slot}{s.filament_type ? ` · ${s.filament_type}` : ''}
+                              {swapLabel && (
+                                <span className="ml-1.5 text-xs text-amber-400">({swapLabel})</span>
+                              )}
+                            </p>
+                            <p className="text-xs text-yellow-600">{t('prints.spoolNotMatched')}</p>
+                          </div>
                         )}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -629,6 +645,11 @@ function LogUsageModal({
 
         <div className="flex justify-end gap-2 px-5 py-4 border-t border-surface-3">
           <button className="btn-ghost" onClick={onCancel}>{t('common.cancel')}</button>
+          {hasUnresolved && suggestions.length > 0 && (
+            <button className="btn-secondary" onClick={onEdit}>
+              {t('prints.logManually')}
+            </button>
+          )}
           <button className="btn-primary" onClick={handleSave}>
             {t('prints.saveUsage')}
           </button>
@@ -1072,6 +1093,7 @@ export default function Prints() {
               setLoggingUsage(null)
             }}
             onCancel={() => setLoggingUsage(null)}
+            onEdit={() => { setEditing(loggingUsage); setLoggingUsage(null) }}
           />
         </Modal>
       )}

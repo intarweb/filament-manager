@@ -504,9 +504,17 @@ def _process_device_message(serial: str, data: dict) -> None:
                         if serial not in _print_active_trays:
                             _print_active_trays[serial] = set()
                         _print_active_trays[serial].add(idx)
+                        prev_slots = set(_print_active_slot_keys.get(serial, set()))
                         if serial not in _print_active_slot_keys:
                             _print_active_slot_keys[serial] = set()
                         _print_active_slot_keys[serial].add(slot_key)
+                        if slot_key not in prev_slots:
+                            import logging as _log
+                            _log.getLogger(__name__).info(
+                                "AMS slot change [%s]: tray_now=%s → %s (active this print: %s)",
+                                serial, tray_now_val, slot_key,
+                                sorted(_print_active_slot_keys[serial]),
+                            )
                 except (TypeError, ValueError):
                     pass
     _printer_status_cache[serial] = current

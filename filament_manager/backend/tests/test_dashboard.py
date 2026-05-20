@@ -191,12 +191,12 @@ class TestRecentPrints:
 
 class TestHAStatus:
     def test_ha_available(self, client):
-        with patch("app.routers.dashboard.ha_client.is_ha_available", new=AsyncMock(return_value=True)):
+        with patch("app.ha_client.is_ha_available", new=AsyncMock(return_value=True)):
             r = client.get("/api/dashboard/ha-status")
         assert r.status_code == 200
         assert r.json()["ha_available"] is True
 
     def test_ha_unavailable(self, client):
-        with patch("app.routers.dashboard.ha_client.is_ha_available", new=AsyncMock(return_value=False)):
+        with patch("app.ha_client.is_ha_available", new=AsyncMock(return_value=False)):
             r = client.get("/api/dashboard/ha-status")
         assert r.json()["ha_available"] is False

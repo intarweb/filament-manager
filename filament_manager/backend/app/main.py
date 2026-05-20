@@ -344,7 +344,58 @@ async def lifespan(app: FastAPI):
                 log.info("Migration: renamed color '%s' → '%s' (%d rows)", de, en, result.rowcount)
         conn.commit()
 
+        # Fix: convert JSON text 'null' to SQL NULL for suggested_usages.
+        # SQLAlchemy JSON columns store Python None as the JSON literal 'null' (not SQL NULL)
+        # when none_as_null=False (the default). This caused the HA sensor's IS NOT NULL
+        # filter to match rows where suggested_usages was "cleared", keeping them pending forever.
+        result = conn.execute(text(
+            "UPDATE print_jobs SET suggested_usages = NULL WHERE suggested_usages = 'null'"
+        ))
+        if result.rowcount:
+            log.info("Migration: fixed %d print_jobs rows with JSON-null suggested_usages → SQL NULL", result.rowcount)
+        conn.commit()
+
     log.info("Database ready")
+
+    # Startup recovery: regenerate suggestions for auto-detected completed prints that
+    # have weight + active tray data but no suggestions (typically lost when the container
+    # restarted during the 45-second background-fetch retry window).
+    from .models import PrintJob as _PJ, PrinterConfig as _PC
+    from .print_monitor import _build_suggestions as _bs
+    from sqlalchemy.orm import Session as _RecoverySession
+    with _RecoverySession(engine) as _rs:
+        _stuck = (
+            _rs.query(_PJ)
+            .filter(
+                _PJ.source == "auto",
+                _PJ.finished_at.isnot(None),
+                _PJ.suggested_usages.is_(None),
+                _PJ.ams_active_trays.isnot(None),
+                _PJ.print_weight_g.isnot(None),
+            )
+            .all()
+        )
+        if _stuck:
+            log.info("Startup recovery: %d print jobs need suggestion rebuild", len(_stuck))
+        for _job in _stuck:
+            try:
+                _printer = _rs.query(_PC).filter_by(name=_job.printer_name).first()
+                _serial = _printer.bambu_serial if _printer else None
+                _suggs = _bs(
+                    job=_job, db=_rs,
+                    ams_detail=[], ams_mapping2=[],
+                    weight=_job.print_weight_g,
+                    spool_snapshot=_job.ams_spool_snapshot or {},
+                    active_slot_keys=set(_job.ams_active_trays),
+                    serial=_serial,
+                    printer_name=_job.printer_name or "",
+                )
+                _job.suggested_usages = _suggs
+                log.info("Startup recovery: job #%d (%s) → %d suggestion(s)", _job.id, _job.name, len(_suggs))
+            except Exception as _exc:
+                log.warning("Startup recovery: failed for job #%d: %s", _job.id, _exc)
+        if _stuck:
+            _rs.commit()
 
     # Seed default filament materials if table is empty
     _DEFAULT_MATERIALS = [

@@ -104,6 +104,11 @@ async def _on_print_end(
     active_slot_keys: set[str] = bambu_cloud_client.get_print_active_slot_keys(serial) if serial else set()
     spool_snapshot: dict = job.ams_spool_snapshot or {}
 
+    log.info(
+        "PRINT END [%s] job=#%d success=%s active_slots=%s snapshot_slots=%s",
+        printer.name, job_id or 0, success, sorted(active_slot_keys), sorted(spool_snapshot.keys()),
+    )
+
     if active_slot_keys:
         job.ams_active_trays = list(active_slot_keys)
         db.commit()
@@ -263,29 +268,37 @@ def _build_suggestions(
 
             handled_slots.add(primary_slot)
 
-        return suggestions
+        if suggestions:
+            return suggestions
+        # All amsDetailMapping entries were external spools — fall through to active_slot_keys fallback
+        log.info("_build_suggestions: all amsDetailMapping entries were external spools for job #%d — trying active_slot_keys fallback", job.id)
 
-    # No amsDetailMapping — fallback: use total weight on the single tracked tray.
-    # Use the snapshot captured at print end (active_slot_keys) rather than reading
-    # the live MQTT cache, which may have been reset by a new print in the 45 s window.
-    if weight is not None and len(active_slot_keys) == 1:
-        slot_key = next(iter(active_slot_keys))
-        snap = spool_snapshot.get(slot_key, {})
-        snap_spool_id = snap.get("spool_id")
-        if snap_spool_id is None:
-            full_slot = f"{printer_name}:{slot_key}" if printer_name else slot_key
-            fb_spool = (
-                db.query(Spool).filter(Spool.ams_slot == full_slot, Spool.current_weight_g > 0).first()
-                or db.query(Spool).filter(Spool.ams_slot == slot_key, Spool.current_weight_g > 0).first()
-            )
-            snap_spool_id = fb_spool.id if fb_spool else None
-        return [{
-            "ams_slot": slot_key, "grams": round(float(weight), 1),
-            "filament_type": snap.get("material") or "",
-            "color": snap.get("color"),
-            "spool_id": snap_spool_id,
-            "estimated": False, "swap_index": None,
-        }]
+    # No amsDetailMapping (or all entries were external spools) — fallback: distribute total weight across active trays.
+    # Single tray: exact. Multiple trays: equal split marked as estimated.
+    # Uses snapshot captured at print end (not live MQTT cache which may be stale).
+    if weight is not None and active_slot_keys:
+        slot_list = sorted(active_slot_keys)
+        multi = len(slot_list) > 1
+        per_slot = round(float(weight) / len(slot_list), 1) if multi else round(float(weight), 1)
+        fallback_suggestions: list[dict] = []
+        for slot_key in slot_list:
+            snap = spool_snapshot.get(slot_key, {})
+            snap_spool_id = snap.get("spool_id")
+            if snap_spool_id is None:
+                full_slot = f"{printer_name}:{slot_key}" if printer_name else slot_key
+                fb_spool = (
+                    db.query(Spool).filter(Spool.ams_slot == full_slot, Spool.current_weight_g > 0).first()
+                    or db.query(Spool).filter(Spool.ams_slot == slot_key, Spool.current_weight_g > 0).first()
+                )
+                snap_spool_id = fb_spool.id if fb_spool else None
+            fallback_suggestions.append({
+                "ams_slot": slot_key, "grams": per_slot,
+                "filament_type": snap.get("material") or "",
+                "color": snap.get("color"),
+                "spool_id": snap_spool_id,
+                "estimated": multi, "swap_index": None,
+            })
+        return fallback_suggestions
 
     return []
 
@@ -538,6 +551,11 @@ async def on_cloud_print_start(printer_id: int, subtask_name: str, serial: str, 
         ams_snapshot = bambu_cloud_client.get_ams_snapshot_for_serial(serial)  # remain_pct only (legacy field)
         ams_detail_now = bambu_cloud_client.get_ams_detail_for_serial(serial)  # full detail for rich snapshot
         status = bambu_cloud_client.get_printer_cloud_status(serial)
+        log.info(
+            "PRINT START [%s] subtask=%r task_id=%s ams_slots=%s",
+            printer.name, subtask_name, status.get("task_id"),
+            sorted(ams_detail_now.keys()),
+        )
 
         task_id_str = str(status["task_id"]) if status.get("task_id") is not None else None
 
@@ -589,6 +607,12 @@ async def on_cloud_print_start(printer_id: int, subtask_name: str, serial: str, 
                 "material": slot_info.get("material"),
                 "color": slot_info.get("color"),
             }
+
+        for _sk, _sv in spool_snap.items():
+            log.info(
+                "PRINT START snapshot [%s] %s: spool_id=%s material=%s color=%s weight_g=%s",
+                printer.name, _sk, _sv.get("spool_id"), _sv.get("material"), _sv.get("color"), _sv.get("weight_g"),
+            )
 
         nozzle_d = status.get("nozzle_diameter")
         job = PrintJob(

@@ -78,6 +78,22 @@ def client(session):
 # Reusable data helpers
 # ---------------------------------------------------------------------------
 
+from sqlalchemy.orm import sessionmaker as _sessionmaker  # noqa: E402
+
+
+@pytest.fixture(scope="function")
+def session_factory(engine):
+    """
+    Callable session factory backed by the per-test in-memory engine.
+
+    Used to patch `print_monitor.SessionLocal` in background-task tests so
+    every `SessionLocal()` call inside the function under test returns a fresh
+    session that shares the same in-memory SQLite database as the test's
+    `session` fixture (StaticPool ensures one connection for all sessions).
+    """
+    return _sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
 SPOOL_DEFAULTS = dict(
     brand="Bambu Lab",
     material="PLA",

@@ -15,7 +15,6 @@ from tests.conftest import make_spool_payload
 
 PRINTER_PAYLOAD = {
     "name": "My Printer",
-    "device_slug": "my_printer",
     "ams_unit_count": 1,
     "is_active": True,
 }
@@ -63,17 +62,17 @@ class TestCreatePrinter:
     def test_stores_fields(self, client):
         data = _create_printer(client)
         assert data["name"] == "My Printer"
-        assert data["device_slug"] == "my_printer"
         assert data["ams_unit_count"] == 1
         assert data["is_active"] is True
+        assert data["bambu_serial"] is None
         assert data["id"] > 0
 
-    def test_optional_ams_device_slug(self, client):
-        data = _create_printer(client, ams_device_slug="my_printer_ams")
-        assert data["ams_device_slug"] == "my_printer_ams"
+    def test_stores_bambu_serial(self, client):
+        data = _create_printer(client, bambu_serial="ABC123")
+        assert data["bambu_serial"] == "ABC123"
 
-    def test_missing_required_field_returns_422(self, client):
-        r = client.post("/api/printers", json={"name": "X"})
+    def test_missing_name_returns_422(self, client):
+        r = client.post("/api/printers", json={})
         assert r.status_code == 422
 
 
@@ -99,10 +98,7 @@ class TestGetPrinter:
 class TestUpdatePrinter:
     def test_update_name(self, client):
         printer_id = _create_printer(client)["id"]
-        r = client.patch(f"/api/printers/{printer_id}", json={
-            "name": "New Name",
-            "device_slug": "my_printer",
-        })
+        r = client.patch(f"/api/printers/{printer_id}", json={"name": "New Name"})
         assert r.status_code == 200
         assert r.json()["name"] == "New Name"
 
@@ -110,7 +106,6 @@ class TestUpdatePrinter:
         printer_id = _create_printer(client)["id"]
         r = client.patch(f"/api/printers/{printer_id}", json={
             "name": "My Printer",
-            "device_slug": "my_printer",
             "ams_unit_count": 2,
         })
         assert r.json()["ams_unit_count"] == 2
@@ -143,58 +138,29 @@ class TestDeletePrinter:
 # ---------------------------------------------------------------------------
 
 class TestPrinterStatus:
-    def test_returns_status_dict(self, client):
+    def test_returns_status_dict_no_serial(self, client):
+        # Printer with no bambu_serial → all fields None (no MQTT data)
         printer_id = _create_printer(client)["id"]
-
-        async def fake_get_entity_value(entity_id):
-            return "idle"
-
-        with patch("app.routers.printers.ha_client.get_entity_value", side_effect=fake_get_entity_value):
-            r = client.get(f"/api/printers/{printer_id}/status")
-
+        r = client.get(f"/api/printers/{printer_id}/status")
         assert r.status_code == 200
         data = r.json()
         assert "print_stage" in data
+        assert data["print_stage"] is None
+
+    def test_returns_status_dict_with_serial(self, client):
+        printer_id = _create_printer(client, bambu_serial="ABC123")["id"]
+        fake_status = {"gcode_state": "IDLE", "mc_percent": 0, "mc_remaining_time": 0,
+                       "nozzle_temper": 25, "bed_temper": 20, "subtask_name": None,
+                       "gcode_file_weight": None, "tray_now": None}
+        with patch("app.bambu_cloud_client.get_printer_cloud_status", return_value=fake_status):
+            with patch("app.bambu_cloud_client.get_ams_unit_tray_counts", return_value={}):
+                r = client.get(f"/api/printers/{printer_id}/status")
+        assert r.status_code == 200
+        assert r.json()["print_stage"] == "IDLE"
 
     def test_status_nonexistent_printer_returns_404(self, client):
         r = client.get("/api/printers/9999/status")
         assert r.status_code == 404
-
-
-# ---------------------------------------------------------------------------
-# GET /api/printers/discover  (mocked HA)
-# ---------------------------------------------------------------------------
-
-class TestDiscoverPrinter:
-    def _mock_entities(self):
-        return [
-            {"entity_id": "sensor.my_printer_current_stage", "state": "idle", "attributes": {}},
-            {"entity_id": "sensor.my_printer_print_progress", "state": "0", "attributes": {}},
-            {"entity_id": "sensor.my_printer_gcode_file", "state": "", "attributes": {}},
-        ]
-
-    def test_discover_returns_slug(self, client):
-        with patch("app.routers.printers.ha_client.get_all_entities",
-                   new=AsyncMock(return_value=self._mock_entities())):
-            r = client.get("/api/printers/discover?device=My+Printer")
-        assert r.status_code == 200
-        assert r.json()["slug"] == "my_printer"
-
-    def test_discover_finds_printer_entities(self, client):
-        with patch("app.routers.printers.ha_client.get_all_entities",
-                   new=AsyncMock(return_value=self._mock_entities())):
-            r = client.get("/api/printers/discover?device=My+Printer")
-        entities = r.json()["printer_entities"]
-        assert entities["print_stage"]["found"] is True
-        assert entities["print_stage"]["entity_id"] == "sensor.my_printer_current_stage"
-
-    def test_discover_unknown_device_shows_not_found(self, client):
-        with patch("app.routers.printers.ha_client.get_all_entities",
-                   new=AsyncMock(return_value=[])):
-            r = client.get("/api/printers/discover?device=UnknownPrinter")
-        assert r.status_code == 200
-        for entity_info in r.json()["printer_entities"].values():
-            assert entity_info["found"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +180,7 @@ class TestAssignAMSTray:
         assert r.json()["ok"] is True
 
         spool_data = client.get(f"/api/spools/{spool['id']}").json()
-        assert spool_data["ams_slot"] == "ams1_tray1"
+        assert spool_data["ams_slot"] == "My Printer:ams1_tray1"
 
     def test_unassign_spool_from_tray(self, client):
         printer = _create_printer(client)
@@ -247,7 +213,7 @@ class TestAssignAMSTray:
         # spool1 should be unassigned
         assert client.get(f"/api/spools/{spool1['id']}").json()["ams_slot"] is None
         # spool2 should be assigned
-        assert client.get(f"/api/spools/{spool2['id']}").json()["ams_slot"] == "ams1_tray1"
+        assert client.get(f"/api/spools/{spool2['id']}").json()["ams_slot"] == "My Printer:ams1_tray1"
 
     def test_assign_invalid_printer_returns_404(self, client):
         spool = _create_spool(client)

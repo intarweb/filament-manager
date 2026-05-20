@@ -215,10 +215,10 @@ class TestImport:
         assert r.json()["imported"]["brand_weights"] == 1
 
     def test_import_skips_duplicate_printer_config(self, client):
-        # Pre-create a printer
-        client.post("/api/printers", json={"name": "My Printer", "device_slug": "my_printer"})
+        # Dedup is by bambu_serial — printer with same serial is skipped
+        client.post("/api/printers", json={"name": "My Printer", "bambu_serial": "SN001"})
         bundle = _minimal_bundle(printer_configs=[
-            {"name": "My Printer", "device_slug": "my_printer"},
+            {"name": "My Printer", "bambu_serial": "SN001"},
         ])
         r = _import(client, bundle)
         assert r.json()["imported"]["printer_configs"] == 0

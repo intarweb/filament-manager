@@ -58,12 +58,14 @@ def _compute(db) -> dict[str, tuple[int, dict]]:
     threshold = (prefs.low_stock_threshold_pct if prefs else None) or 20
 
     # ── pending usages ────────────────────────────────────────────────────────
+    # Guard against both SQL NULL and JSON text 'null' (stored when none_as_null=False was the default).
     pending_jobs = (
         db.query(PrintJob)
         .filter(
             PrintJob.source == "auto",
             PrintJob.finished_at.isnot(None),
             PrintJob.suggested_usages.isnot(None),
+            PrintJob.suggested_usages != "null",
         )
         .options(joinedload(PrintJob.usages))
         .all()

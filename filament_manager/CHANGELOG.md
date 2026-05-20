@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.37.7
+
+- Fix: **Suggestions silently dropped when Bambu amsMapping2 marks all slots as external** — when `amsDetailMapping` had entries but every corresponding `amsMapping2` entry carried `amsId=254` (Bambu's external-spool marker), the loop skipped all entries and returned `[]` without ever reaching the `active_slot_keys` fallback; the code now falls through to the fallback when the amsDetailMapping loop produces nothing, so a single-tray print correctly generates a suggestion from the captured active slot and print weight
+
+## 0.37.6
+
+- Fix: **Suggestions lost after container restart** — the 45-second background retry task was an in-memory asyncio task that was lost whenever the container restarted (e.g. during an update); jobs with print weight and active-tray data but no suggestions are now recovered on startup using the stored snapshot + active tray data
+- Fix: **No suggestions shown when multiple AMS trays were active** — the fallback path (used when Bambu Cloud returns no `amsDetailMapping`) previously returned nothing if more than one tray was active during the print; it now produces equal-split placeholder suggestions for all active trays, marked as estimated so the user can adjust before saving
+
+## 0.37.5
+
+- Fix: **Log Usage modal showed no spool info for old prints** — suggestions generated before `spool_id` was added to the suggestion schema had no spool identifier; the AMS tray fallback also failed when the slot is now empty or has a different spool loaded; unmatched rows now show the slot name + material hint in yellow, and a "Log manually" button appears in the footer so users can redirect to the edit form to assign the correct spool
+
+## 0.37.4
+
+- Fix: **`sensor.filament_manager_pending_usages` permanently stuck at non-zero** — SQLAlchemy's JSON column stored Python `None` as the JSON literal `'null'` (not SQL NULL) when clearing `suggested_usages` after usage is logged; the HA sensor's `IS NOT NULL` filter matched this text value and kept counting those jobs as pending even after usage was confirmed; fixed by adding `none_as_null=True` to the column definition, a one-time migration to convert existing `'null'` text rows to SQL NULL, and a belt-and-suspenders filter guard
+
 ## 0.37.3
 
 - Fix: **Log Usage banner never appeared when Bambu returned no usable slot data** — after the background retry (v0.37.2) ran both attempts, if no suggestions could be built (no `amsDetailMapping` and no matching spool), `suggested_usages` stayed `null` and the banner was hidden; now the banner always appears after a finished auto-detected print (even with empty pre-fill) so material can be logged manually
