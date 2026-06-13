@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.39.1
+
+- Enhancement: **Dedicated Color 2/3/4 columns in spool table and filament catalog** — the three optional extra color fields now have their own columns (Color 2, Color 3, Color 4) showing a color dot in both the spool table view and the filament catalog table in Settings; the spool table columns are optional and can be toggled via the column picker; the primary Color column no longer shows the extra dots inline since they are visible in the dedicated columns
+
 ## 0.39.0
 
 - Feature: **Filament breakdown in Projects** — each project card now shows a color-coded material breakdown (color dot, material name, grams) instead of a plain material list; the breakdown is sorted by grams descending and aggregates usage across all prints in the project

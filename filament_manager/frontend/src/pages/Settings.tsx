@@ -1303,7 +1303,7 @@ const EMPTY_CATALOG: CatalogEntry = {
   article_number: null,
 }
 
-type CatalogSortKey = 'brand' | 'material' | 'subtype' | 'subtype2' | 'color_name' | 'color_hex' | 'article_number'
+type CatalogSortKey = 'brand' | 'material' | 'subtype' | 'subtype2' | 'color_name' | 'color_hex' | 'color2_hex' | 'color3_hex' | 'color4_hex' | 'article_number'
 type CatalogSortDir = 'asc' | 'desc'
 
 function CatalogSortIcon({ col, sort }: { col: CatalogSortKey; sort: { key: CatalogSortKey; dir: CatalogSortDir } }) {
@@ -1331,7 +1331,7 @@ function CatalogEditRow({ entry, editForm, setEditForm, onSave, onCancel, brands
   const set = (k: keyof CatalogEntry, v: string) => setEditForm({ ...editForm, [k]: v })
   const hexValid = /^#[0-9a-fA-F]{6}$/.test(editForm.color_hex)
   const canSave = editForm.brand.trim() && editForm.material.trim() && editForm.color_name.trim() && hexValid
-  const colSpan = 8 // actions + 7 data columns
+  const colSpan = 11 // actions + 10 data columns
   const actionCell = (
     <td className="px-2 py-1">
       <div className="flex gap-1">
@@ -1710,6 +1710,9 @@ function FilamentDataSection({ actionsLast }: { actionsLast: boolean }) {
                 ['subtype2',       t('settings.filamentCatalog.subtype2')],
                 ['color_name',     t('settings.filamentCatalog.colorName')],
                 ['color_hex',      t('settings.filamentCatalog.colorHex')],
+                ['color2_hex',     t('settings.filamentCatalog.color2_hex')],
+                ['color3_hex',     t('settings.filamentCatalog.color3_hex')],
+                ['color4_hex',     t('settings.filamentCatalog.color4_hex')],
                 ['article_number', t('settings.filamentCatalog.articleNumber')],
               ] as [CatalogSortKey, string][]).map(([key, label]) => (
                 <th
@@ -1734,7 +1737,7 @@ function FilamentDataSection({ actionsLast }: { actionsLast: boolean }) {
                   >✕</button>
                 </td>
               )}
-              {(['brand', 'material', 'subtype', 'subtype2', 'color_name', 'color_hex', 'article_number'] as CatalogSortKey[]).map(key => (
+              {(['brand', 'material', 'subtype', 'subtype2', 'color_name', 'color_hex', 'color2_hex', 'color3_hex', 'color4_hex', 'article_number'] as CatalogSortKey[]).map(key => (
                 <td key={key} className="sticky top-9 z-10 bg-surface-3 px-2 py-1">
                   <input
                     className="w-full bg-surface-3 rounded px-2 py-0.5 text-xs text-gray-100 placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-accent"
@@ -1757,7 +1760,7 @@ function FilamentDataSection({ actionsLast }: { actionsLast: boolean }) {
           </thead>
           <tbody>
             {processed.length === 0 && (
-              <tr><td colSpan={8} className="text-xs text-gray-500 py-4 px-3">
+              <tr><td colSpan={11} className="text-xs text-gray-500 py-4 px-3">
                 {hasFilter ? t('settings.filamentCatalog.noResults') : t('settings.filamentCatalog.noEntries')}
               </td></tr>
             )}
@@ -1793,13 +1796,13 @@ function FilamentDataSection({ actionsLast }: { actionsLast: boolean }) {
                 <td className="px-3 py-2 whitespace-nowrap">
                   <span className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: entry.color_hex }} />
-                    {[entry.color2_hex, entry.color3_hex, entry.color4_hex].filter(Boolean).map((h, i) => (
-                      <span key={i} className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: h! }} />
-                    ))}
                     {entry.color_name}
                   </span>
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap font-mono text-gray-400">{entry.color_hex}</td>
+                <td className="px-3 py-2">{entry.color2_hex ? <span className="w-4 h-4 rounded-full block ring-1 ring-white/10" style={{ background: entry.color2_hex }} /> : <span className="text-gray-600">—</span>}</td>
+                <td className="px-3 py-2">{entry.color3_hex ? <span className="w-4 h-4 rounded-full block ring-1 ring-white/10" style={{ background: entry.color3_hex }} /> : <span className="text-gray-600">—</span>}</td>
+                <td className="px-3 py-2">{entry.color4_hex ? <span className="w-4 h-4 rounded-full block ring-1 ring-white/10" style={{ background: entry.color4_hex }} /> : <span className="text-gray-600">—</span>}</td>
                 <td className="px-3 py-2 whitespace-nowrap text-gray-400">{entry.article_number ?? '—'}</td>
                 {actionsLast && (
                   <td className="px-3 py-2 whitespace-nowrap">

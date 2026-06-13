@@ -592,7 +592,8 @@ function SpoolCard({ spool, onEdit, onDuplicate, onHistory, onDelete, onArchive,
 
 // ── Table View ────────────────────────────────────────────────────────────────
 
-type SortKey = 'custom_id' | 'brand' | 'material' | 'subtype' | 'color_name' | 'article_number' | 'remaining_pct' |
+type SortKey = 'custom_id' | 'brand' | 'material' | 'subtype' | 'color_name' | 'color2_hex' | 'color3_hex' | 'color4_hex' |
+               'article_number' | 'remaining_pct' |
                'current_weight_g' | 'initial_weight_g' | 'purchase_price' |
                'price_per_kg' | 'purchased_at' | 'purchase_location' | 'storage_location' | 'last_dried_at' | 'ams_slot'
 type SortDir = 'asc' | 'desc'
@@ -732,6 +733,9 @@ function SpoolTable({ spools, onEdit, onDuplicate, onHistory, onDelete, onArchiv
     { key: 'material',          label: t('spools.table.material'),          width: 'w-20' },
     { key: 'subtype',           label: t('spools.table.subtype'),           width: 'w-24' },
     { key: 'color_name',        label: t('spools.table.color'),             width: 'w-32', always: true },
+    { key: 'color2_hex',        label: t('spools.table.color2'),            width: 'w-16' },
+    { key: 'color3_hex',        label: t('spools.table.color3'),            width: 'w-16' },
+    { key: 'color4_hex',        label: t('spools.table.color4'),            width: 'w-16' },
     { key: 'article_number',    label: t('spools.table.articleNumber'),     width: 'w-28' },
     { key: 'remaining_pct',     label: t('spools.table.remaining'),         width: 'w-28', always: true },
     { key: 'current_weight_g',  label: t('spools.table.currentWeight'),     width: 'w-24' },
@@ -782,7 +786,10 @@ function SpoolTable({ spools, onEdit, onDuplicate, onHistory, onDelete, onArchiv
       case 'brand':            return <td key={c.key} className="px-3 py-2 font-medium text-white whitespace-nowrap">{s.brand}</td>
       case 'material':         return <td key={c.key} className="px-3 py-2 whitespace-nowrap">{s.material}</td>
       case 'subtype':          return <td key={c.key} className="px-3 py-2 whitespace-nowrap text-gray-300">{[s.subtype, s.subtype2].filter(Boolean).join(' · ') || '—'}</td>
-      case 'color_name':       return <td key={c.key} className="px-3 py-2 whitespace-nowrap"><span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: s.color_hex }} />{[s.color2_hex, s.color3_hex, s.color4_hex].filter(Boolean).map((h, i) => <span key={i} className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: h! }} />)}{s.color_name}{s.bambu_spool_id && <span title={t('spools.bambuLinked')}><Cloud size={10} className="text-blue-400 shrink-0" /></span>}</span></td>
+      case 'color_name':       return <td key={c.key} className="px-3 py-2 whitespace-nowrap"><span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: s.color_hex }} />{s.color_name}{s.bambu_spool_id && <span title={t('spools.bambuLinked')}><Cloud size={10} className="text-blue-400 shrink-0" /></span>}</span></td>
+      case 'color2_hex':       return <td key={c.key} className="px-3 py-2">{s.color2_hex ? <span className="w-4 h-4 rounded-full block ring-1 ring-white/10" style={{ background: s.color2_hex }} /> : <span className="text-gray-600">—</span>}</td>
+      case 'color3_hex':       return <td key={c.key} className="px-3 py-2">{s.color3_hex ? <span className="w-4 h-4 rounded-full block ring-1 ring-white/10" style={{ background: s.color3_hex }} /> : <span className="text-gray-600">—</span>}</td>
+      case 'color4_hex':       return <td key={c.key} className="px-3 py-2">{s.color4_hex ? <span className="w-4 h-4 rounded-full block ring-1 ring-white/10" style={{ background: s.color4_hex }} /> : <span className="text-gray-600">—</span>}</td>
       case 'article_number':   return <td key={c.key} className="px-3 py-2 whitespace-nowrap text-gray-400 font-mono">{s.article_number ?? '—'}</td>
       case 'remaining_pct':    return <td key={c.key} className="px-3 py-2 whitespace-nowrap"><div className="flex items-center gap-2"><div className="w-16 h-1.5 rounded-full bg-surface-3 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: barColor }} /></div><span style={{ color: barColor }}>{pct}%</span></div></td>
       case 'current_weight_g': return <td key={c.key} className="px-3 py-2 whitespace-nowrap text-gray-300">{(s.current_weight_g / 1000).toFixed(3)} kg</td>
