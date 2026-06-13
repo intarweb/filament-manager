@@ -31,7 +31,8 @@
     "of": "de",
     "search": "Buscar…",
     "clear": "Limpiar",
-    "experimental": "Experimental"
+    "experimental": "Experimental",
+    "optional": "opcional"
   },
   "dashboard": {
     "title": "Panel",
@@ -109,6 +110,9 @@
       "diameter": "Diámetro (mm)",
       "colorName": "Nombre del color",
       "colorSwatch": "Muestra de color",
+      "color2_hex": "Color 2 (opcional)",
+      "color3_hex": "Color 3 (opcional)",
+      "color4_hex": "Color 4 (opcional)",
       "colorHexInvalid": "Debe ser un color hexadecimal válido de 6 dígitos (ej. #ff5733)",
       "weight": "Peso",
       "nominalWeight": "Peso nominal del filamento",
@@ -484,6 +488,9 @@
       "subtype2": "Subtipo 2",
       "colorName": "Nombre de color",
       "colorHex": "Hex de color",
+      "color2_hex": "Color 2 (opcional)",
+      "color3_hex": "Color 3 (opcional)",
+      "color4_hex": "Color 4 (opcional)",
       "articleNumber": "Nº artículo",
       "noEntries": "No hay entradas en el catálogo. Haz clic en Añadir para crear una.",
       "exportCsv": "Exportar CSV",

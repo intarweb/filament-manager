@@ -399,7 +399,8 @@ def create_filament_catalog(body: FilamentCatalogCreate, db: Session = Depends(g
     return entry
 
 
-_PROPAGATE_FIELDS = ("brand", "material", "subtype", "subtype2", "color_name", "color_hex")
+_PROPAGATE_FIELDS = ("brand", "material", "subtype", "subtype2", "color_name", "color_hex",
+                     "color2_hex", "color3_hex", "color4_hex")
 
 
 @router.patch("/filament-catalog/{entry_id}", response_model=FilamentCatalogOut)

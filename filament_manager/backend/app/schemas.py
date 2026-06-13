@@ -12,6 +12,9 @@ class SpoolBase(BaseModel):
     subtype2: str | None = None
     color_name: str
     color_hex: str = "#888888"
+    color2_hex: str | None = None
+    color3_hex: str | None = None
+    color4_hex: str | None = None
     diameter_mm: float = 1.75
     initial_weight_g: float
     current_weight_g: float
@@ -39,6 +42,9 @@ class SpoolUpdate(BaseModel):
     subtype2: str | None = None
     color_name: str | None = None
     color_hex: str | None = None
+    color2_hex: str | None = None
+    color3_hex: str | None = None
+    color4_hex: str | None = None
     diameter_mm: float | None = None
     initial_weight_g: float | None = None
     current_weight_g: float | None = None
@@ -292,6 +298,9 @@ class FilamentCatalogBase(BaseModel):
     subtype2: str | None = None
     color_name: str
     color_hex: str = "#888888"
+    color2_hex: str | None = None
+    color3_hex: str | None = None
+    color4_hex: str | None = None
     article_number: str | None = None
 
 
@@ -306,6 +315,9 @@ class FilamentCatalogUpdate(BaseModel):
     subtype2: str | None = None
     color_name: str | None = None
     color_hex: str | None = None
+    color2_hex: str | None = None
+    color3_hex: str | None = None
+    color4_hex: str | None = None
     article_number: str | None = None
     propagate_to_spools: bool = False
 

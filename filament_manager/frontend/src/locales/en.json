@@ -31,7 +31,8 @@
     "of": "of",
     "search": "Search…",
     "clear": "Clear",
-    "experimental": "Experimental"
+    "experimental": "Experimental",
+    "optional": "optional"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -109,6 +110,9 @@
       "diameter": "Diameter (mm)",
       "colorName": "Color Name",
       "colorSwatch": "Color Swatch",
+      "color2_hex": "Color 2 (optional)",
+      "color3_hex": "Color 3 (optional)",
+      "color4_hex": "Color 4 (optional)",
       "colorHexInvalid": "Must be a valid 6-digit hex color (e.g. #ff5733)",
       "weight": "Weight",
       "nominalWeight": "Nominal filament weight",
@@ -484,6 +488,9 @@
       "subtype2": "Subtype 2",
       "colorName": "Color Name",
       "colorHex": "Color Hex",
+      "color2_hex": "Color 2 (optional)",
+      "color3_hex": "Color 3 (optional)",
+      "color4_hex": "Color 4 (optional)",
       "articleNumber": "Article No.",
       "noEntries": "No filament catalog entries yet. Click Add to create one.",
       "exportCsv": "Export CSV",

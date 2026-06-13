@@ -1298,7 +1298,9 @@ type CatalogEntry = Omit<FilamentCatalog, 'id' | 'created_at' | 'updated_at'>
 
 const EMPTY_CATALOG: CatalogEntry = {
   brand: '', material: '', subtype: null, subtype2: null,
-  color_name: '', color_hex: '#888888', article_number: null,
+  color_name: '', color_hex: '#888888',
+  color2_hex: null, color3_hex: null, color4_hex: null,
+  article_number: null,
 }
 
 type CatalogSortKey = 'brand' | 'material' | 'subtype' | 'subtype2' | 'color_name' | 'color_hex' | 'article_number'
@@ -1356,12 +1358,34 @@ function CatalogEditRow({ entry, editForm, setEditForm, onSave, onCancel, brands
         </select></td>
         <td className="px-2 py-1"><input className="input text-xs py-0.5 w-full" value={editForm.color_name} onChange={e => set('color_name', e.target.value)} /></td>
         <td className="px-2 py-1">
-          <div className="flex items-center gap-1">
-            <input type="color" className="w-6 h-6 rounded cursor-pointer border border-surface-3 bg-transparent p-0 shrink-0" value={editForm.color_hex} onChange={e => set('color_hex', e.target.value)} />
-            <div className="flex items-center">
-              <span className="px-1.5 py-0.5 text-xs text-gray-400 bg-surface-3 border border-r-0 border-surface-3 rounded-l select-none">#</span>
-              <input className={`input text-xs py-0.5 w-16 font-mono rounded-l-none ${!hexValid ? 'border-red-500 focus:border-red-500' : ''}`} value={editForm.color_hex.replace(/^#/, '')} onChange={e => set('color_hex', '#' + e.target.value.replace(/^#/, ''))} maxLength={6} />
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1">
+              <input type="color" className="w-6 h-6 rounded cursor-pointer border border-surface-3 bg-transparent p-0 shrink-0" value={editForm.color_hex} onChange={e => set('color_hex', e.target.value)} />
+              <div className="flex items-center">
+                <span className="px-1.5 py-0.5 text-xs text-gray-400 bg-surface-3 border border-r-0 border-surface-3 rounded-l select-none">#</span>
+                <input className={`input text-xs py-0.5 w-16 font-mono rounded-l-none ${!hexValid ? 'border-red-500 focus:border-red-500' : ''}`} value={editForm.color_hex.replace(/^#/, '')} onChange={e => set('color_hex', '#' + e.target.value.replace(/^#/, ''))} maxLength={6} />
+              </div>
             </div>
+            {(['color2_hex', 'color3_hex', 'color4_hex'] as const).map(k => (
+              <div key={k} className="flex items-center gap-1">
+                <input type="color" className="w-6 h-6 rounded cursor-pointer border border-surface-3 bg-transparent p-0 shrink-0"
+                  value={/^#[0-9a-fA-F]{6}$/.test(editForm[k] ?? '') ? editForm[k]! : '#888888'}
+                  onChange={e => setEditForm({ ...editForm, [k]: e.target.value })} />
+                <div className="flex items-center">
+                  <span className="px-1.5 py-0.5 text-xs text-gray-400 bg-surface-3 border border-r-0 border-surface-3 rounded-l select-none">#</span>
+                  <input className="input text-xs py-0.5 w-16 font-mono rounded-l-none"
+                    value={(editForm[k] ?? '').replace(/^#/, '')}
+                    onChange={e => setEditForm({ ...editForm, [k]: e.target.value ? '#' + e.target.value.replace(/^#/, '') : null })}
+                    placeholder="opt" maxLength={6} />
+                </div>
+                {editForm[k] && (
+                  <button type="button" className="text-gray-600 hover:text-red-400 p-0.5"
+                    onClick={() => setEditForm({ ...editForm, [k]: null })}>
+                    <X size={10} />
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         </td>
         <td className="px-2 py-1"><input className="input text-xs py-0.5 w-full" value={editForm.article_number ?? ''} onChange={e => set('article_number', e.target.value)} /></td>
@@ -1514,7 +1538,7 @@ function FilamentDataSection({ actionsLast }: { actionsLast: boolean }) {
 
   const startEdit = (e: FilamentCatalog) => {
     setEditingId(e.id)
-    setEditForm({ brand: e.brand, material: e.material, subtype: e.subtype ?? '', subtype2: e.subtype2 ?? '', color_name: e.color_name, color_hex: e.color_hex, article_number: e.article_number ?? '' })
+    setEditForm({ brand: e.brand, material: e.material, subtype: e.subtype ?? '', subtype2: e.subtype2 ?? '', color_name: e.color_name, color_hex: e.color_hex, color2_hex: e.color2_hex ?? null, color3_hex: e.color3_hex ?? null, color4_hex: e.color4_hex ?? null, article_number: e.article_number ?? '' })
   }
 
   const addHexValid = /^#[0-9a-fA-F]{6}$/.test(form.color_hex)
@@ -1645,6 +1669,31 @@ function FilamentDataSection({ actionsLast }: { actionsLast: boolean }) {
               </button>
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {(['color2_hex', 'color3_hex', 'color4_hex'] as const).map(k => (
+              <div key={k}>
+                <label className="label text-xs">{t(`settings.filamentCatalog.${k}`)}</label>
+                <div className="flex items-center gap-1">
+                  <input type="color" className="w-8 h-8 rounded cursor-pointer border border-surface-3 bg-transparent p-0.5 shrink-0"
+                    value={/^#[0-9a-fA-F]{6}$/.test(form[k] ?? '') ? form[k]! : '#888888'}
+                    onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} />
+                  <div className="flex items-center flex-1">
+                    <span className="px-2 py-1 text-xs text-gray-400 bg-surface-3 border border-r-0 border-surface-3 rounded-l select-none">#</span>
+                    <input className="input text-xs py-1 font-mono flex-1 rounded-l-none"
+                      value={(form[k] ?? '').replace(/^#/, '')}
+                      onChange={e => setForm(f => ({ ...f, [k]: e.target.value ? '#' + e.target.value.replace(/^#/, '') : null }))}
+                      placeholder={t('common.optional')} maxLength={6} />
+                  </div>
+                  {form[k] && (
+                    <button type="button" className="text-gray-600 hover:text-red-400 p-0.5"
+                      onClick={() => setForm(f => ({ ...f, [k]: null }))}>
+                      <X size={10} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1744,6 +1793,9 @@ function FilamentDataSection({ actionsLast }: { actionsLast: boolean }) {
                 <td className="px-3 py-2 whitespace-nowrap">
                   <span className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: entry.color_hex }} />
+                    {[entry.color2_hex, entry.color3_hex, entry.color4_hex].filter(Boolean).map((h, i) => (
+                      <span key={i} className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: h! }} />
+                    ))}
                     {entry.color_name}
                   </span>
                 </td>

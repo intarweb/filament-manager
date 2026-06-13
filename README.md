@@ -2,7 +2,7 @@
 
 A Home Assistant add-on for tracking 3D printer filament inventory, monitoring print history, and calculating material costs. Integrates natively with Bambu Lab printers via **Bambu Lab Cloud (MQTT)**.
 
-![Version](https://img.shields.io/badge/version-0.38.0-blue) ![Platform](https://img.shields.io/badge/platform-Home%20Assistant-teal)
+![Version](https://img.shields.io/badge/version-0.38.1-blue) ![Platform](https://img.shields.io/badge/platform-Home%20Assistant-teal)
 
 ---
 
@@ -40,6 +40,7 @@ Spools, print history, and all other data are unaffected.
 - **Spool weight history** — every weight change is logged with action type, before/after values, and linked print name; viewable per spool via the history icon
 - **Spool archive** — retire empty or inactive spools with the archive action; archived spools are hidden from inventory, excluded from AMS auto-match, and do not trigger low-stock alerts; toggle "Show archived" in the toolbar to view or restore them
 - **Configurable spool table columns** — show or hide individual columns in the spool table via the column picker; selection is saved locally and persists across sessions
+- **Extra color fields** — spools and filament catalog entries support up to 3 optional extra hex color fields (Color 2–4) for multicolor filaments (silk duo, marble, gradient); extra colors appear as additional dots in the spool table and tile view; purely for inventory — not used in AMS auto-matching
 - **Regional overrides** — timezone, currency, and country can be set manually in Settings → Appearance; overrides take precedence over Home Assistant; app works fully without HA when all three are set
 - **Bambu Lab Filament Sync** (Experimental) — synchronise your spool inventory with the Bambu Lab filament library; choose pull (cloud → local), push (local → cloud), or bidirectional mode; synced spools show a cloud badge; configure in Settings → Cloud Config
 

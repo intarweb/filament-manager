@@ -12,6 +12,7 @@ import { formatDateOnly } from '../utils/time'
 const EMPTY_FORM = {
   custom_id: '',
   brand: '', material: 'PLA', subtype: '', subtype2: '', color_name: '', color_hex: '#888888',
+  color2_hex: '', color3_hex: '', color4_hex: '',
   diameter_mm: '', initial_weight_g: 1000, current_weight_g: 1000,
   purchase_price: '', purchased_at: '', purchase_location: '', storage_location: '',
   article_number: '', last_dried_at: '', ams_slot: '', notes: '',
@@ -42,6 +43,9 @@ function SpoolForm({
     last_dried_at: initial?.last_dried_at ? initial.last_dried_at.slice(0, 10) : '',
     initial_weight_g: initial?.initial_weight_g ?? 1000,
     current_weight_g: initial?.current_weight_g ?? 1000,
+    color2_hex: initial?.color2_hex ?? '',
+    color3_hex: initial?.color3_hex ?? '',
+    color4_hex: initial?.color4_hex ?? '',
   })
 
   const [measuredTotal, setMeasuredTotal] = useState('')
@@ -105,6 +109,9 @@ function SpoolForm({
                     subtype2: entry.subtype2 ?? '',
                     color_name: entry.color_name,
                     color_hex: entry.color_hex,
+                    color2_hex: entry.color2_hex ?? '',
+                    color3_hex: entry.color3_hex ?? '',
+                    color4_hex: entry.color4_hex ?? '',
                   }))
                   setTimeout(() => weightInputRef.current?.focus(), 0)
                 } else {
@@ -213,6 +220,42 @@ function SpoolForm({
               )}
             </div>
           </div>
+
+          {/* Optional extra colors for multicolor filaments */}
+          {(['color2_hex', 'color3_hex', 'color4_hex'] as const).map((key, i) => (
+            <div key={key} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div />
+              <div>
+                <label className="label">{t(`spools.form.${key}`)}</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    className="h-9 w-16 rounded cursor-pointer bg-surface-3 border border-surface-3"
+                    value={/^#[0-9a-fA-F]{6}$/.test(form[key]) ? form[key] : '#888888'}
+                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                  />
+                  <div className="flex items-center flex-1">
+                    <span className="px-2 py-1.5 text-sm text-gray-400 bg-surface-3 border border-r-0 border-surface-3 rounded-l-lg select-none">#</span>
+                    <input
+                      className="input flex-1 rounded-l-none"
+                      value={form[key].replace(/^#/, '')}
+                      onChange={e => setForm(f => ({ ...f, [key]: e.target.value ? '#' + e.target.value.replace(/^#/, '') : '' }))}
+                      placeholder={t('common.optional')}
+                      maxLength={6}
+                    />
+                  </div>
+                  {form[key] && (
+                    <button type="button" className="text-gray-500 hover:text-red-400 p-1" onClick={() => setForm(f => ({ ...f, [key]: '' }))}>
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                {form[key] && !/^#[0-9a-fA-F]{6}$/.test(form[key]) && (
+                  <p className="text-xs text-red-400 mt-1">{t('spools.form.colorHexInvalid')}</p>
+                )}
+              </div>
+            </div>
+          ))}
 
           {/* Weight section */}
           <div className="rounded-xl border border-surface-3 p-3 space-y-3 bg-surface-3/20">
@@ -492,6 +535,9 @@ function SpoolCard({ spool, onEdit, onDuplicate, onHistory, onDelete, onArchive,
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <span className="w-4 h-4 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: spool.color_hex }} />
+          {[spool.color2_hex, spool.color3_hex, spool.color4_hex].filter(Boolean).map((h, i) => (
+            <span key={i} className="w-3.5 h-3.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: h! }} />
+          ))}
           <div className="min-w-0">
             <p className="text-sm font-semibold text-white truncate">
               {spool.brand} {spool.material}
@@ -736,7 +782,7 @@ function SpoolTable({ spools, onEdit, onDuplicate, onHistory, onDelete, onArchiv
       case 'brand':            return <td key={c.key} className="px-3 py-2 font-medium text-white whitespace-nowrap">{s.brand}</td>
       case 'material':         return <td key={c.key} className="px-3 py-2 whitespace-nowrap">{s.material}</td>
       case 'subtype':          return <td key={c.key} className="px-3 py-2 whitespace-nowrap text-gray-300">{[s.subtype, s.subtype2].filter(Boolean).join(' · ') || '—'}</td>
-      case 'color_name':       return <td key={c.key} className="px-3 py-2 whitespace-nowrap"><span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: s.color_hex }} />{s.color_name}{s.bambu_spool_id && <span title={t('spools.bambuLinked')}><Cloud size={10} className="text-blue-400 shrink-0" /></span>}</span></td>
+      case 'color_name':       return <td key={c.key} className="px-3 py-2 whitespace-nowrap"><span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: s.color_hex }} />{[s.color2_hex, s.color3_hex, s.color4_hex].filter(Boolean).map((h, i) => <span key={i} className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: h! }} />)}{s.color_name}{s.bambu_spool_id && <span title={t('spools.bambuLinked')}><Cloud size={10} className="text-blue-400 shrink-0" /></span>}</span></td>
       case 'article_number':   return <td key={c.key} className="px-3 py-2 whitespace-nowrap text-gray-400 font-mono">{s.article_number ?? '—'}</td>
       case 'remaining_pct':    return <td key={c.key} className="px-3 py-2 whitespace-nowrap"><div className="flex items-center gap-2"><div className="w-16 h-1.5 rounded-full bg-surface-3 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: barColor }} /></div><span style={{ color: barColor }}>{pct}%</span></div></td>
       case 'current_weight_g': return <td key={c.key} className="px-3 py-2 whitespace-nowrap text-gray-300">{(s.current_weight_g / 1000).toFixed(3)} kg</td>
@@ -909,6 +955,9 @@ export default function Spools() {
     last_dried_at: form.last_dried_at || null,
     subtype: form.subtype || null,
     subtype2: form.subtype2 || null,
+    color2_hex: (form.color2_hex && /^#[0-9a-fA-F]{6}$/.test(form.color2_hex)) ? form.color2_hex : null,
+    color3_hex: (form.color3_hex && /^#[0-9a-fA-F]{6}$/.test(form.color3_hex)) ? form.color3_hex : null,
+    color4_hex: (form.color4_hex && /^#[0-9a-fA-F]{6}$/.test(form.color4_hex)) ? form.color4_hex : null,
     ams_slot: form.ams_slot || null,
     notes: form.notes || null,
   } as Partial<Spool>)

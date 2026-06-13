@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.1
+
+- Enhancement: **Extra color fields for multicolor filaments** — spools and filament catalog entries now have three optional extra color fields (Color 2, Color 3, Color 4); set the hex value for each additional stripe or blend color; extra colors appear as additional color dots next to the primary color in the spool table and tile view; the fields are purely for inventory purposes and have no effect on AMS auto-matching or any other logic; catalog → spool auto-fill and propagation include the new fields; spool CSV export/import and full JSON backup/restore include all three fields
+
 ## 0.38.0
 
 - Enhancement: **"Reload" button in Log Filament Usage modal** — when a tray shows "Spool not matched" (e.g. the spool was assigned in Settings after opening the modal), a small Reload button now appears next to the warning; clicking it re-fetches the current AMS tray assignments so the modal picks up the newly assigned spool without needing to close and reopen; AMS tray data is also now always pre-fetched when the modal has suggestions, so a spool that was assigned before opening the modal is immediately shown without any user action

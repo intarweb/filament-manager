@@ -355,6 +355,19 @@ async def lifespan(app: FastAPI):
             log.info("Migration: fixed %d print_jobs rows with JSON-null suggested_usages → SQL NULL", result.rowcount)
         conn.commit()
 
+        for _col in ("color2_hex", "color3_hex", "color4_hex"):
+            if _col not in spool_cols:
+                conn.execute(text(f"ALTER TABLE spools ADD COLUMN {_col} TEXT"))
+                conn.commit()
+                log.info("Migration: added spools.%s", _col)
+
+        catalog_cols = [c["name"] for c in insp.get_columns("filament_catalog")]
+        for _col in ("color2_hex", "color3_hex", "color4_hex"):
+            if _col not in catalog_cols:
+                conn.execute(text(f"ALTER TABLE filament_catalog ADD COLUMN {_col} TEXT"))
+                conn.commit()
+                log.info("Migration: added filament_catalog.%s", _col)
+
     log.info("Database ready")
 
     # Startup recovery: regenerate suggestions for auto-detected completed prints that

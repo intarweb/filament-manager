@@ -31,7 +31,8 @@
     "of": "von",
     "search": "Suchen…",
     "clear": "Zurücksetzen",
-    "experimental": "Experimentell"
+    "experimental": "Experimentell",
+    "optional": "optional"
   },
   "dashboard": {
     "title": "Übersicht",
@@ -109,6 +110,9 @@
       "diameter": "Durchmesser (mm)",
       "colorName": "Farbname",
       "colorSwatch": "Farbauswahl",
+      "color2_hex": "Farbe 2 (optional)",
+      "color3_hex": "Farbe 3 (optional)",
+      "color4_hex": "Farbe 4 (optional)",
       "colorHexInvalid": "Muss ein gültiger 6-stelliger Hex-Farbcode sein (z. B. #ff5733)",
       "weight": "Gewicht",
       "nominalWeight": "Nominales Filamentgewicht",
@@ -484,6 +488,9 @@
       "subtype2": "Untertyp 2",
       "colorName": "Farbname",
       "colorHex": "Farb-Hex",
+      "color2_hex": "Farbe 2 (optional)",
+      "color3_hex": "Farbe 3 (optional)",
+      "color4_hex": "Farbe 4 (optional)",
       "articleNumber": "Artikelnr.",
       "noEntries": "Noch keine Einträge im Filamentkatalog. Klicke auf Hinzufügen.",
       "exportCsv": "CSV exportieren",

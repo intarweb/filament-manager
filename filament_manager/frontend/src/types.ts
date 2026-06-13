@@ -7,6 +7,9 @@ export interface Spool {
   subtype2: string | null
   color_name: string
   color_hex: string
+  color2_hex: string | null
+  color3_hex: string | null
+  color4_hex: string | null
   diameter_mm: number
   initial_weight_g: number
   current_weight_g: number
@@ -243,6 +246,9 @@ export interface FilamentCatalog {
   subtype2: string | null
   color_name: string
   color_hex: string
+  color2_hex: string | null
+  color3_hex: string | null
+  color4_hex: string | null
   article_number: string | null
   created_at: string
   updated_at: string
