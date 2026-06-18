@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.39.5
+
+- Security: **python-multipart updated to 0.0.31** — resolves four CVEs (quadratic-time querystring parsing DoS, negative Content-Length memory exhaustion, semicolon parameter smuggling, RFC 2231 Content-Disposition parameter smuggling)
+
 ## 0.39.4
 
 - Feature: **Two new HA sensors** — `sensor.filament_manager_total_spools` reports how many non-archived spools are in active inventory; `sensor.filament_manager_consumed_spools` reports how many spools are fully depleted (weight = 0 g, archived or not); both sensors expose a `by_material` attribute with a per-material count dict (e.g. `{PLA: 5, PETG: 2}`) for use in HA dashboards and automations (issue #56)
