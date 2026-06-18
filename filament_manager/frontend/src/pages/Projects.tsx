@@ -272,18 +272,6 @@ function ProjectCard({
             </span>
           )}
           {durationH && <span>{durationH}h</span>}
-          {project.material_usage.length > 0 && (
-            <span className="hidden lg:flex items-center gap-2 flex-wrap">
-              {project.material_usage.map((m, i) => (
-                <span key={i} className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full shrink-0 ring-1 ring-white/10"
-                        style={{ background: m.color_hex }} />
-                  <span className="text-gray-400">{m.material}</span>
-                  <span className="text-gray-500">{m.grams.toFixed(0)}g</span>
-                </span>
-              ))}
-            </span>
-          )}
         </div>
 
         <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
@@ -305,6 +293,18 @@ function ProjectCard({
 
       {expanded && (
         <div className="mt-3 pt-3 border-t border-surface-3">
+          {project.material_usage.length > 0 && (
+            <div className="flex items-center gap-3 flex-wrap mb-3 pb-2 border-b border-surface-3">
+              {project.material_usage.map((m, i) => (
+                <span key={i} className="flex items-center gap-1 text-xs">
+                  <span className="w-2 h-2 rounded-full shrink-0 ring-1 ring-white/10"
+                        style={{ background: m.color_hex }} />
+                  <span className="text-gray-400">{m.material}</span>
+                  <span className="text-gray-500">{m.grams.toFixed(0)}g</span>
+                </span>
+              ))}
+            </div>
+          )}
           {!detail && (
             <p className="text-xs text-gray-500">{t('common.loading')}</p>
           )}

@@ -241,7 +241,7 @@ class TestBuildSuggestions:
     def test_auto_switch_splits_weight_across_slots(self, session):
         """
         AMS auto-switched to a backup tray with the same material+color.
-        Weight in amsDetailMapping covers both; split by snapshot stock level.
+        Primary is consumed first (AMS drains it before switching); backup gets the remainder.
         """
         spool1 = _make_spool(session, f"{self.PRINTER}:ams1_tray1", current_weight_g=50.0)
         spool2 = _make_spool(session, f"{self.PRINTER}:ams1_tray2", current_weight_g=200.0)
@@ -260,8 +260,33 @@ class TestBuildSuggestions:
 
         assert len(result) == 2
         by_slot = {r["ams_slot"]: r for r in result}
-        assert by_slot["ams1_tray2"]["grams"] == 200.0   # filled from backup first (sorted order)
-        assert by_slot["ams1_tray1"]["grams"] == 50.0    # remainder on primary
+        assert by_slot["ams1_tray1"]["grams"] == 50.0    # primary exhausted first
+        assert by_slot["ams1_tray2"]["grams"] == 200.0   # backup consumed remainder
+
+    def test_auto_switch_primary_not_fully_consumed(self, session):
+        """
+        Regression: when total consumed < backup snapshot weight, primary must be
+        attributed its full snapshot weight. Old code assigned all grams to backup first.
+        """
+        spool1 = _make_spool(session, f"{self.PRINTER}:ams1_tray1", current_weight_g=300.0)
+        spool2 = _make_spool(session, f"{self.PRINTER}:ams1_tray2", current_weight_g=500.0)
+        job = _make_job(session)
+        snap = {
+            "ams1_tray1": {"spool_id": spool1.id, "weight_g": 300.0, "material": "PLA", "color": "#FF0000"},
+            "ams1_tray2": {"spool_id": spool2.id, "weight_g": 500.0, "material": "PLA", "color": "#FF0000"},
+        }
+
+        result = self._call(
+            session, job,
+            ams_detail=[{"ams": 0, "weight": 400.0, "filamentType": "PLA", "sourceColor": "FF0000"}],
+            spool_snapshot=snap,
+            active_slot_keys={"ams1_tray1", "ams1_tray2"},
+        )
+
+        assert len(result) == 2
+        by_slot = {r["ams_slot"]: r for r in result}
+        assert by_slot["ams1_tray1"]["grams"] == 300.0   # primary fully consumed (its snapshot weight)
+        assert by_slot["ams1_tray2"]["grams"] == 100.0   # backup gets remainder (400 - 300)
 
     # ── amsDetailMapping absent — fallback path ───────────────────────────
 

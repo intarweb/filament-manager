@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.39.4
+
+- Feature: **Two new HA sensors** — `sensor.filament_manager_total_spools` reports how many non-archived spools are in active inventory; `sensor.filament_manager_consumed_spools` reports how many spools are fully depleted (weight = 0 g, archived or not); both sensors expose a `by_material` attribute with a per-material count dict (e.g. `{PLA: 5, PETG: 2}`) for use in HA dashboards and automations (issue #56)
+
+## 0.39.3
+
+- Fix: **Material breakdown moved into expanded project view** — the color-dot filament summary is no longer shown inline in the collapsed project card header (where it caused overlap at higher browser zoom levels); it now appears at the top of the expanded section, before the print job list (issue #54)
+
+## 0.39.2
+
+- Fix: **AMS auto-switch consumption order** — filament weight is now correctly attributed to the primary spool first (until its snapshot stock is exhausted), then to the backup tray; previously the backup spool was assigned weight first, producing wrong usage numbers when the total consumed was less than the backup spool's starting weight
+
 ## 0.39.1
 
 - Enhancement: **Dedicated Color 2/3/4 columns in spool table and filament catalog** — the three optional extra color fields now have their own columns (Color 2, Color 3, Color 4) showing a color dot in both the spool table view and the filament catalog table in Settings; the spool table columns are optional and can be toggled via the column picker; the primary Color column no longer shows the extra dots inline since they are visible in the dedicated columns

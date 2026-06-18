@@ -234,7 +234,17 @@ def _build_suggestions(
                          primary_slot, job.id, original_g, replacement_g)
 
             elif auto_switch_slots:
-                remaining = tray_weight
+                # Primary slot is consumed first (AMS drains it before switching to backup).
+                primary_snap_weight = float(primary_snap.get("weight_g") or 0.0)
+                primary_used = round(min(primary_snap_weight, tray_weight), 1)
+                remaining = round(tray_weight - primary_used, 1)
+                if primary_used > 0:
+                    suggestions.append({
+                        "ams_slot": primary_slot, "grams": primary_used,
+                        "filament_type": material, "color": color_hex,
+                        "spool_id": primary_snap_spool_id,
+                        "estimated": True, "swap_index": None,
+                    })
                 for extra_slot in auto_switch_slots:
                     extra_snap = spool_snapshot.get(extra_slot, {})
                     extra_weight = float(extra_snap.get("weight_g") or 0.0)
@@ -248,13 +258,6 @@ def _build_suggestions(
                         })
                         remaining -= used
                     handled_slots.add(extra_slot)
-                if remaining > 0:
-                    suggestions.append({
-                        "ams_slot": primary_slot, "grams": round(remaining, 1),
-                        "filament_type": material, "color": color_hex,
-                        "spool_id": primary_snap_spool_id,
-                        "estimated": True, "swap_index": None,
-                    })
                 log.info("Cloud: auto-switch detected on %s (+ %s) for job #%d",
                          primary_slot, auto_switch_slots, job.id)
 

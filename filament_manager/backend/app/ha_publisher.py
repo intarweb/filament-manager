@@ -23,7 +23,9 @@ _POLL_INTERVAL = 30    # seconds between periodic pushes
 _ENTITY_PENDING    = "sensor.filament_manager_pending_usages"
 _ENTITY_LOW_STOCK  = "sensor.filament_manager_low_stock_spools"
 _ENTITY_UNMATCHED  = "sensor.filament_manager_ams_unmatched"
-_ENTITY_LAST_PRINT = "sensor.filament_manager_last_print"
+_ENTITY_LAST_PRINT      = "sensor.filament_manager_last_print"
+_ENTITY_TOTAL_SPOOLS    = "sensor.filament_manager_total_spools"
+_ENTITY_CONSUMED_SPOOLS = "sensor.filament_manager_consumed_spools"
 
 _trigger_event: asyncio.Event | None = None
 _event_loop: asyncio.AbstractEventLoop | None = None
@@ -82,6 +84,17 @@ def _compute(db) -> dict[str, tuple[int, dict]]:
         if s.current_weight_g > 0 and 0 < s.remaining_pct < threshold
     ]
     low_names = [f"{s.brand} {s.material} {s.color_name}".strip() for s in low]
+
+    # ── spool inventory + consumed ───────────────────────────────────────────
+    def _count_by_material(spool_list: list) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for s in spool_list:
+            mat = s.material or "Unknown"
+            counts[mat] = counts.get(mat, 0) + 1
+        return dict(sorted(counts.items()))
+
+    active_spools = [s for s in spools if not s.archived]
+    empty_spools  = [s for s in spools if s.current_weight_g == 0]
 
     # ── AMS unmatched ─────────────────────────────────────────────────────────
     from . import bambu_cloud_client
@@ -188,6 +201,24 @@ def _compute(db) -> dict[str, tuple[int, dict]]:
             },
         ),
         _ENTITY_LAST_PRINT: (last_print_state, last_print_attrs),
+        _ENTITY_TOTAL_SPOOLS: (
+            len(active_spools),
+            {
+                "friendly_name": "Filament Manager: Total Spools",
+                "icon": "mdi:package-variant",
+                "unit_of_measurement": "spools",
+                "by_material": _count_by_material(active_spools),
+            },
+        ),
+        _ENTITY_CONSUMED_SPOOLS: (
+            len(empty_spools),
+            {
+                "friendly_name": "Filament Manager: Consumed Spools",
+                "icon": "mdi:package-variant-remove",
+                "unit_of_measurement": "spools",
+                "by_material": _count_by_material(empty_spools),
+            },
+        ),
     }
 
 
