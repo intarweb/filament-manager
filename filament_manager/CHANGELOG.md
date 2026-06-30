@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.39.9
+
+- Fix: **Filament sync push to cloud** — bidirectional/push sync was returning HTTP 400 when creating new cloud spools because the payload was missing fields required by Bambu's `CreateFilamentV2Req` schema (`createType`, `colorType`, `filamentId`, `isSupport`); push sync now succeeds for manually-added local spools
+
 ## 0.39.8
 
 - Feature: **Authenticator-app (TOTP) 2FA login** — accounts using a TOTP authenticator app (Google Authenticator, Authy, etc.) for Bambu Cloud 2FA can now log in; previously these accounts failed with "Cannot create token" because only email-code 2FA was supported; email-code accounts are unaffected — huge thanks to **[@terafin](https://github.com/terafin)** for the contribution! (PR #58)

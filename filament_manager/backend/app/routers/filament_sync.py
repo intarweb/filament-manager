@@ -101,10 +101,18 @@ def _local_to_cloud_body(spool: Spool) -> dict:
         parts = [spool.brand or "", spool.material or ""]
         filament_name = " ".join(p for p in parts if p).strip() or "Unknown"
     return {
+        # createType / colorType / filamentId / isSupport are required by the
+        # Bambu Swagger schema (CreateFilamentV2Req). Manually-added spools have
+        # no RFID and no Bambu product ID so createType="manual", filamentId="",
+        # isSupport=False, colorType=2 (monochrome). Missing any of these → 400.
+        "createType":     "manual",
         "filamentVendor": spool.brand or "",
         "filamentType":   spool.material or "",
         "filamentName":   filament_name,
+        "filamentId":     "",
+        "isSupport":      False,
         "color":          color_hex,
+        "colorType":      2,
         "totalNetWeight": int(spool.initial_weight_g or 0),
         "netWeight":      int(spool.current_weight_g or 0),
         "note":           spool.notes or "",
