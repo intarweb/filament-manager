@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.39.10
+
+- Fix: **Bambu cloud filament list/sync** — the cloud filament endpoints (`my/filament/v2` list/create/update + `my/filament/v2/batch` delete + `filament/config`) were on the retired `…/v1/user-service/…` base, returning `404 Not Found` (`Bambu filament list failed: 404 … /v1/user-service/my/filament/v2`). Bambu moved cloud filament management onto the `design-user-service` micro-service; corrected the base to `https://api.bambulab.com/v1/design-user-service` (host, `/v1/`, path tail, and bearer auth unchanged — only the service segment moved). Verified against the reverse-engineered ClusterM/open-bamboo-networking `cloud_filament.cpp` and Doridian/OpenBambuAPI `cloud-http.md`. (Addresses the same 404 as upstream cgradl/filament-manager #57.)
+
 ## 0.39.9
 
 - Fix: **Bambu authenticator-app (TOTP) 2FA login** — the two-factor verification endpoint was POSTed to the wrong host (`https://api.bambulab.com/api/sign-in/tfa`), which returns `404 Not Found`; corrected to `https://bambulab.com/api/sign-in/tfa` (the TFA endpoint lives on the bare `bambulab.com` domain, not the `api.` subdomain). Verified against the upstream greghesp/pybambu `BAMBU_URL[TFA_LOGIN]`. Resolves "Verification failed: 400: … 404 Client Error … /api/sign-in/tfa" on authenticator-app accounts.
