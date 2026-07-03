@@ -252,23 +252,65 @@ class TestAssignPersistsTagUid:
 
 
 # ---------------------------------------------------------------------------
-# Cloud RFID capture (filament_sync._extract_cloud_tag_uid) — what makes it automatic
+# Cloud-authoritative AMS slot binding (filament_sync) — the automatic path
 # ---------------------------------------------------------------------------
 
-class TestCloudRfidCapture:
-    @pytest.mark.parametrize("record,expected", [
-        ({"rfid": REAL_TAG}, REAL_TAG),
-        ({"tagUid": REAL_TAG}, REAL_TAG),
-        ({"tag_uid": REAL_TAG}, REAL_TAG),
-        ({"filamentTagUid": REAL_TAG}, REAL_TAG),
-        ({"tray_uid": REAL_TAG}, REAL_TAG),
-        ({"RFID": REAL_TAG}, REAL_TAG),
-        ({"id": "123", "filamentType": "PLA"}, None),        # no RFID key present
-        ({"rfid": ZERO_TAG}, None),                          # all-zeros → not a real tag
-        ({"rfid": ""}, None),                                # empty
-        ({"rfid": "   "}, None),                             # whitespace only
-        ({"rfid": None, "tagUid": REAL_TAG}, REAL_TAG),      # first key null → next wins
+class TestCloudSlotKey:
+    @pytest.mark.parametrize("rec,expected", [
+        ({"inPrinter": True, "amsId": 1, "slotId": 1}, "ams2_tray2"),      # PETG live sample
+        ({"inPrinter": True, "amsId": 128, "slotId": 0}, "ams129_tray1"),  # ABS live sample (AMS-HT)
+        ({"inPrinter": True, "amsId": 0, "slotId": 0}, "ams1_tray1"),
+        ({"inPrinter": True, "amsId": "2", "slotId": "3"}, "ams3_tray4"),  # numeric strings
+        ({"inPrinter": False, "amsId": 1, "slotId": 1}, None),             # not loaded
+        ({"amsId": 1, "slotId": 1}, None),                                 # no inPrinter flag
+        ({"inPrinter": True, "amsId": 254, "slotId": 0}, None),            # external-spool sentinel
+        ({"inPrinter": True, "amsId": 1, "slotId": 255}, None),            # sentinel slot
+        ({"inPrinter": True, "amsId": None, "slotId": 1}, None),           # unparseable
+        ({"inPrinter": True}, None),                                       # missing ids
     ])
-    def test_extract_cloud_tag_uid(self, record, expected):
-        from app.routers.filament_sync import _extract_cloud_tag_uid
-        assert _extract_cloud_tag_uid(record) == expected
+    def test_cloud_ams_slot_key(self, rec, expected):
+        from app.routers.filament_sync import _cloud_ams_slot_key
+        assert _cloud_ams_slot_key(rec) == expected
+
+
+class TestCloudSlotBind:
+    def test_binds_when_single_active_printer(self, session):
+        from app.routers.filament_sync import _bind_ams_slots_from_cloud
+        _mk_printer(session)  # one active printer "My Printer"
+        spool = _mk_spool(session, material="PLA")
+        spool.bambu_spool_id = "c1"
+        session.commit()
+        cloud_by_id = {"c1": {"id": "c1", "inPrinter": True, "amsId": 1, "slotId": 1}}
+
+        _bind_ams_slots_from_cloud(session, cloud_by_id)
+        session.commit()
+        session.refresh(spool)
+        assert spool.ams_slot == "My Printer:ams2_tray2"
+
+    def test_skips_when_multiple_printers(self, session):
+        """Ambiguous printer attribution → never guess (mirrors the whole fix)."""
+        from app.routers.filament_sync import _bind_ams_slots_from_cloud
+        _mk_printer(session, name="P1", serial="01P00A000000001")
+        _mk_printer(session, name="P2", serial="01P00A000000002")
+        spool = _mk_spool(session, material="PLA")
+        spool.bambu_spool_id = "c1"
+        session.commit()
+        cloud_by_id = {"c1": {"id": "c1", "inPrinter": True, "amsId": 1, "slotId": 1}}
+
+        _bind_ams_slots_from_cloud(session, cloud_by_id)
+        session.commit()
+        session.refresh(spool)
+        assert spool.ams_slot is None
+
+    def test_not_in_printer_leaves_slot_unset(self, session):
+        from app.routers.filament_sync import _bind_ams_slots_from_cloud
+        _mk_printer(session)
+        spool = _mk_spool(session, material="PLA")
+        spool.bambu_spool_id = "c1"
+        session.commit()
+        cloud_by_id = {"c1": {"id": "c1", "inPrinter": False, "amsId": 1, "slotId": 1}}
+
+        _bind_ams_slots_from_cloud(session, cloud_by_id)
+        session.commit()
+        session.refresh(spool)
+        assert spool.ams_slot is None

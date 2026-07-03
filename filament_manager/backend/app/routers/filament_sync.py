@@ -27,7 +27,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db, SessionLocal
-from ..models import Spool, UserPreferences
+from ..models import PrinterConfig, Spool, UserPreferences
 from .. import bambu_cloud_client
 
 log = logging.getLogger(__name__)
@@ -158,31 +158,74 @@ def _local_to_cloud_body(spool: Spool) -> dict:
     }
 
 
-# ── Cloud RFID capture ──────────────────────────────────────────────────────────
+# ── Cloud AMS slot binding ───────────────────────────────────────────────────────
 
-# Bambu Cloud's field name for a spool's physical RFID tag_uid is unconfirmed and
-# has varied across API versions, so we probe several candidate keys (inspect the
-# live shape via GET /api/bambu-cloud/filaments-raw). First non-empty, non-all-zeros
-# wins. Capturing this onto Spool.tag_uid is what lets AMS auto-bind match a loaded
-# tray to the right physical spool by EXACT RFID — no material/colour guessing.
-_RFID_KEYS = ("rfid", "tagUid", "tag_uid", "filamentTagUid", "tray_uid", "RFID")
+def _cloud_ams_slot_key(rec: dict) -> str | None:
+    """Map a cloud filament record's AMS position to the addon slot_key form.
 
-
-def _extract_cloud_tag_uid(cloud: dict) -> str | None:
-    """Best-effort pull of a physical RFID tag_uid from a cloud filament record.
-
-    Returns a cleaned string, or ``None`` for empty / all-zeros / absent (mirrors
-    ams_autobind._is_real_tag_uid so we never store a non-identifying tag).
+    Bambu Cloud marks a spool physically loaded in an AMS tray with
+    ``inPrinter`` truthy plus 0-based ``amsId``/``slotId``. The addon's tray
+    cache keys slots as ``"ams{unit}_tray{tray}"`` with both 1-based and the
+    254/255 sentinels (external/virtual spool) filtered — see
+    ``bambu_cloud_client._parse_ams_into_cache``. We reproduce that exactly so a
+    cloud-derived slot_key matches the tray cache. Returns ``None`` when the
+    spool is not in a printer or the ids are sentinels/unparseable.
     """
-    for key in _RFID_KEYS:
-        val = cloud.get(key)
-        if val is None:
+    if not rec.get("inPrinter"):
+        return None
+    try:
+        ams_id = int(rec.get("amsId"))
+        slot_id = int(rec.get("slotId"))
+    except (TypeError, ValueError):
+        return None
+    if ams_id in (254, 255) or slot_id in (254, 255):
+        return None
+    return f"ams{ams_id + 1}_tray{slot_id + 1}"
+
+
+def _bind_ams_slots_from_cloud(db: Session, cloud_by_id: dict[str, dict]) -> None:
+    """Set ``ams_slot`` on linked spools directly from the cloud AMS position.
+
+    Deterministic and RFID-free: the cloud is authoritative for which tray each
+    spool sits in. We can only attribute a slot to a printer when there is
+    exactly ONE active printer (the cloud filament record does not name the
+    device); with several we skip rather than guess — never bind ambiguously.
+    """
+    active = (
+        db.query(PrinterConfig)
+        .filter(PrinterConfig.is_active == True)  # noqa: E712
+        .all()
+    )
+    if len(active) != 1:
+        if active:
+            log.info(
+                "filament sync: %d active printers — skipping cloud-AMS slot bind "
+                "(cloud record does not name the device); manual assign only",
+                len(active),
+            )
+        return
+    printer = active[0]
+
+    for spool in db.query(Spool).filter(Spool.bambu_spool_id.isnot(None)).all():
+        cloud = cloud_by_id.get(spool.bambu_spool_id)
+        if not cloud:
             continue
-        s = str(val).strip()
-        if not s or set(s) <= {"0"}:
+        slot_key = _cloud_ams_slot_key(cloud)
+        if slot_key is None:
             continue
-        return s
-    return None
+        full_key = f"{printer.name}:{slot_key}"
+        if spool.ams_slot == full_key:
+            continue
+        # One physical spool per slot — clear any other spool claiming it.
+        db.query(Spool).filter(
+            ((Spool.ams_slot == full_key) | (Spool.ams_slot == slot_key)),
+            Spool.id != spool.id,
+        ).update({"ams_slot": None}, synchronize_session=False)
+        log.info(
+            "filament sync: cloud-AMS bind spool #%d → %s (was %s)",
+            spool.id, full_key, spool.ams_slot,
+        )
+        spool.ams_slot = full_key
 
 
 # ── Match scoring ──────────────────────────────────────────────────────────────
@@ -548,24 +591,15 @@ async def apply_sync(body: ApplySyncRequest, db: Session = Depends(get_db)):
             log.warning("apply: import error for cloud=%s: %s", cloud_id, exc)
             errors += 1
 
-    # 2b. Backfill the physical RFID tag_uid from the authoritative cloud record
-    #     onto every linked spool missing it (just-matched, just-imported, and any
-    #     previously-linked spool). This is what makes AMS auto-bind automatic: the
-    #     record self-identifies by exact RFID, so no manual "Assign spool" tap is
-    #     needed once the cloud provides the tag.
+    # 2b. Bind ams_slot directly from the AUTHORITATIVE cloud AMS position.
+    #     Bambu Cloud reports which AMS slot each loaded spool occupies
+    #     (inPrinter + amsId + slotId); binding straight from that is fully
+    #     deterministic and needs no RFID/tag matching. We only know WHICH
+    #     printer's AMS it is when exactly one active printer exists (the cloud
+    #     filament record doesn't name the device) — with multiple printers we
+    #     SKIP rather than guess: never bind ambiguously.
     db.flush()  # ensure just-imported spools are queryable below
-    for spool in (
-        db.query(Spool)
-        .filter(Spool.bambu_spool_id.isnot(None))
-        .filter(Spool.tag_uid.is_(None))
-        .all()
-    ):
-        cloud = cloud_by_id.get(spool.bambu_spool_id)
-        if not cloud:
-            continue
-        tag = _extract_cloud_tag_uid(cloud)
-        if tag:
-            spool.tag_uid = tag
+    _bind_ams_slots_from_cloud(db, cloud_by_id)
 
     # 3. Push local → cloud (create cloud records for local-only spools)
     for local_id in body.push_to_cloud:
