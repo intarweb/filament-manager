@@ -330,6 +330,30 @@ class TestCloudSlotBind:
         session.refresh(spool)
         assert spool.ams_slot is None
 
+    def test_stale_duplicate_slot_newer_wins(self, session):
+        """Bambu leaves inPrinter=true on a swapped-out record → two records claim
+        the same slot. Bind the newer (max updatedAt); skip the stale older one.
+        (Real collision from prod: ams4_tray3, white current vs blue stale.)"""
+        from app.routers.filament_sync import _bind_ams_slots_from_cloud
+        _mk_printer(session, name="Garage", serial="DEV1")
+        newer = _mk_spool(session, material="PLA", color_hex="#FFFFFF")
+        newer.bambu_spool_id = "1827160"
+        older = _mk_spool(session, material="PLA", color_hex="#0A2989")
+        older.bambu_spool_id = "593855"
+        session.commit()
+        cloud_by_id = {
+            "1827160": {"id": "1827160", "inPrinter": True, "amsId": 3, "slotId": 2,
+                        "devId": "DEV1", "updatedAt": 1782177080},  # newer = current
+            "593855":  {"id": "593855", "inPrinter": True, "amsId": 3, "slotId": 2,
+                        "devId": "DEV1", "updatedAt": 1782162701},  # older = stale
+        }
+
+        _bind_ams_slots_from_cloud(session, cloud_by_id)
+        session.commit()
+        session.refresh(newer); session.refresh(older)
+        assert newer.ams_slot == "Garage:ams4_tray3"
+        assert older.ams_slot is None
+
 
 class TestTagUidManualClear:
     """SpoolUpdate now carries tag_uid so a stale/wrong stamp can be cleared or

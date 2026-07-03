@@ -183,6 +183,14 @@ def _cloud_ams_slot_key(rec: dict) -> str | None:
     return f"ams{ams_id + 1}_tray{slot_id + 1}"
 
 
+def _cloud_updated_at(rec: dict) -> float:
+    """Epoch seconds from a cloud record's ``updatedAt`` (0.0 if absent/bad)."""
+    try:
+        return float(rec.get("updatedAt") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _bind_ams_slots_from_cloud(db: Session, cloud_by_id: dict[str, dict]) -> None:
     """Set ``ams_slot`` on linked spools directly from the cloud AMS position.
 
@@ -202,6 +210,29 @@ def _bind_ams_slots_from_cloud(db: Session, cloud_by_id: dict[str, dict]) -> Non
     if not printers_by_serial:
         return
 
+    # Resolve stale-flag collisions: Bambu Cloud sometimes leaves inPrinter=true on
+    # an OLD record after a spool is swapped out, so two records can claim the same
+    # (devId, slot). Keep only the most-recently-updated record per slot (the actual
+    # current occupant) and skip the stale older one(s) — newer deterministically wins.
+    groups: dict[tuple, list[dict]] = {}
+    for cloud in cloud_by_id.values():
+        slot_key = _cloud_ams_slot_key(cloud)
+        if slot_key is None:
+            continue
+        dev = str(cloud.get("devId") or "")
+        if dev in printers_by_serial:
+            groups.setdefault((dev, slot_key), []).append(cloud)
+    winner_id_by_slot: dict[tuple, object] = {}
+    for key, recs in groups.items():
+        recs.sort(key=_cloud_updated_at, reverse=True)
+        winner_id_by_slot[key] = recs[0].get("id")
+        for stale in recs[1:]:
+            log.info(
+                "filament sync: slot %s has a stale duplicate cloud record id=%s "
+                "(updatedAt=%s); keeping newer id=%s",
+                key[1], stale.get("id"), stale.get("updatedAt"), recs[0].get("id"),
+            )
+
     for spool in db.query(Spool).filter(Spool.bambu_spool_id.isnot(None)).all():
         cloud = cloud_by_id.get(spool.bambu_spool_id)
         if not cloud:
@@ -209,9 +240,12 @@ def _bind_ams_slots_from_cloud(db: Session, cloud_by_id: dict[str, dict]) -> Non
         slot_key = _cloud_ams_slot_key(cloud)
         if slot_key is None:
             continue
-        printer = printers_by_serial.get(str(cloud.get("devId") or ""))
+        dev = str(cloud.get("devId") or "")
+        printer = printers_by_serial.get(dev)
         if printer is None:
             continue  # spool loaded on a printer we don't track → skip
+        if winner_id_by_slot.get((dev, slot_key)) != cloud.get("id"):
+            continue  # stale duplicate for this slot — the newer record owns it
         full_key = f"{printer.name}:{slot_key}"
         if spool.ams_slot == full_key:
             continue
