@@ -104,9 +104,18 @@ def get_ams_by_serial(serial: str) -> list[dict]:
             "ha_color_hex": td.get("color"),
             "ha_remaining": str(td["remain"]) if "remain" in td else None,
             "remain_flag":  td.get("remain_flag"),  # 0/None = reliable, 1 = rough estimate
+            "tag_uid":      td.get("tag_uid"),       # RFID tag id (all-zeros = no/stripped RFID)
         }
         for slot_key, td in sorted(detail.items())
     ]
+
+
+@router.get("/filaments-raw")
+async def get_filaments_raw(limit: int = 5) -> dict:
+    """Probe: return raw Bambu Cloud filament records verbatim, to reveal which
+    fields (RFID / tag id) the cloud actually sends for AMS-scanned spools."""
+    hits = await bambu_cloud_client.list_all_filaments()
+    return {"total": len(hits), "keys": sorted({k for h in hits for k in h.keys()}), "sample": hits[:limit]}
 
 
 @router.get("/debug")

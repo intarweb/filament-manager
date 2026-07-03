@@ -653,6 +653,11 @@ def _parse_ams_into_cache(serial: str, ams_raw: dict) -> None:
             if "remain_flag" in tray:
                 slot["remain_flag"] = tray["remain_flag"]
 
+            # tag_uid — AMS RFID tag id (16 hex chars; all-zeros when the tray
+            # has no RFID or Bambu Cloud strips it). Kept for spool auto-bind.
+            if "tag_uid" in tray:
+                slot["tag_uid"] = tray["tag_uid"]
+
             # color — update only when a non-empty value is sent
             color_raw = str(tray.get("tray_color") or tray.get("color") or "").strip()
             if len(color_raw) >= 6:

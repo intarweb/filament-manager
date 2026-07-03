@@ -83,6 +83,7 @@ async def get_ams_trays(printer_id: int, db: Session = Depends(get_db)):
             "ha_material":  td.get("material") or None,
             "ha_color_hex": td.get("color"),
             "ha_remaining": ha_remaining,
+            "tag_uid":      td.get("tag_uid"),  # RFID tag id (all-zeros = no/stripped RFID)
             "spool":        SpoolOut.model_validate(spool).model_dump() if spool else None,
         })
     return result
