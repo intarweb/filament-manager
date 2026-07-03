@@ -73,6 +73,7 @@ class SpoolOut(SpoolBase):
     updated_at: datetime
     bambu_spool_id: str | None = None
     bambu_synced_at: datetime | None = None
+    tag_uid: str | None = None
 
 
 # ── PrintUsage ───────────────────────────────────────────────────────────────

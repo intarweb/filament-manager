@@ -1,0 +1,268 @@
+"""
+Tests for RFID tag_uid AMS auto-bind (app.ams_autobind) and the assign
+endpoint's tag_uid persistence.
+
+The auto-bind logic is exercised against the in-memory DB via the `session`
+fixture with `bambu_cloud_client.get_ams_detail_for_serial` monkeypatched to
+return a synthetic AMS tray snapshot. The assign endpoint is exercised via the
+HTTP `client`.
+"""
+import pytest
+from unittest.mock import patch
+
+from app import ams_autobind, bambu_cloud_client
+from app.models import PrinterConfig, Spool
+from tests.conftest import make_spool_payload
+
+
+REAL_TAG = "4767E20300000100"
+REAL_TAG_2 = "4767E20300000200"
+ZERO_TAG = "0000000000000000"
+SERIAL = "01P00A000000001"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _mk_printer(session, name="My Printer", serial=SERIAL, active=True):
+    p = PrinterConfig(name=name, bambu_serial=serial, is_active=active, bambu_source="cloud")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+    return p
+
+
+def _mk_spool(session, **kw):
+    data = make_spool_payload(**kw)
+    s = Spool(**data)
+    session.add(s)
+    session.commit()
+    session.refresh(s)
+    return s
+
+
+def _run_autobind(session, detail):
+    """Patch the AMS cache + SessionLocal so autobind uses the test DB session."""
+    class _Factory:
+        def __call__(self):
+            return session
+    # autobind opens its own SessionLocal() and closes it — patch to hand back
+    # the test session and no-op close so assertions can read the same rows.
+    orig_close = session.close
+    session.close = lambda: None
+    try:
+        with patch.object(bambu_cloud_client, "get_ams_detail_for_serial", return_value=detail), \
+             patch.object(ams_autobind, "SessionLocal", _Factory()), \
+             patch("app.ha_publisher.trigger", lambda: None):
+            return ams_autobind.autobind_from_ams_cache(SERIAL)
+    finally:
+        session.close = orig_close
+
+
+# ---------------------------------------------------------------------------
+# _is_real_tag_uid
+# ---------------------------------------------------------------------------
+
+class TestIsRealTagUid:
+    @pytest.mark.parametrize("val", [None, "", "   ", ZERO_TAG, "000", "0"])
+    def test_rejects_empty_and_zeros(self, val):
+        assert ams_autobind._is_real_tag_uid(val) is False
+
+    @pytest.mark.parametrize("val", [REAL_TAG, "4767E20300000100", "0000000000000001"])
+    def test_accepts_real(self, val):
+        assert ams_autobind._is_real_tag_uid(val) is True
+
+
+# ---------------------------------------------------------------------------
+# First bind (single unambiguous candidate)
+# ---------------------------------------------------------------------------
+
+class TestFirstBind:
+    def test_single_material_color_candidate_is_bound(self, session):
+        _mk_printer(session)
+        spool = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF")
+        detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF", "tag_uid": REAL_TAG, "remain": 90}}
+
+        changed = _run_autobind(session, detail)
+
+        session.refresh(spool)
+        assert changed == 1
+        assert spool.tag_uid == REAL_TAG
+        assert spool.ams_slot == "My Printer:ams1_tray1"
+
+    def test_ambiguous_multiple_candidates_not_bound(self, session):
+        """Two identical white PLA spools → ambiguous → nothing bound (safety)."""
+        _mk_printer(session)
+        s1 = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF")
+        s2 = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF")
+        detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF", "tag_uid": REAL_TAG, "remain": 90}}
+
+        changed = _run_autobind(session, detail)
+
+        session.refresh(s1); session.refresh(s2)
+        assert changed == 0
+        assert s1.tag_uid is None and s2.tag_uid is None
+        assert s1.ams_slot is None and s2.ams_slot is None
+
+    def test_zero_candidates_not_bound(self, session):
+        _mk_printer(session)
+        spool = _mk_spool(session, material="PETG", color_name="Black", color_hex="#000000")
+        detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF", "tag_uid": REAL_TAG, "remain": 90}}
+
+        changed = _run_autobind(session, detail)
+        session.refresh(spool)
+        assert changed == 0
+        assert spool.tag_uid is None
+
+    def test_zero_tag_is_skipped(self, session):
+        """Third-party spool (all-zeros tag) → never auto-bound."""
+        _mk_printer(session)
+        spool = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF")
+        detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF", "tag_uid": ZERO_TAG, "remain": 90}}
+
+        changed = _run_autobind(session, detail)
+        session.refresh(spool)
+        assert changed == 0
+        assert spool.tag_uid is None
+        assert spool.ams_slot is None
+
+    def test_prefers_bambu_spool_id_and_color(self, session):
+        """When tray carries a bambu_spool_id it disambiguates two same-material spools."""
+        _mk_printer(session)
+        s1 = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF",
+                       bambu_spool_id="111")
+        s2 = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF",
+                       bambu_spool_id="222")
+        detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF",
+                                 "bambu_spool_id": "222", "tag_uid": REAL_TAG, "remain": 90}}
+
+        changed = _run_autobind(session, detail)
+        session.refresh(s1); session.refresh(s2)
+        assert changed == 1
+        assert s2.tag_uid == REAL_TAG
+        assert s1.tag_uid is None
+
+    def test_empty_stock_spool_not_a_candidate(self, session):
+        _mk_printer(session)
+        spool = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF",
+                          current_weight_g=0.0)
+        detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF", "tag_uid": REAL_TAG, "remain": 0}}
+        changed = _run_autobind(session, detail)
+        session.refresh(spool)
+        assert changed == 0
+        assert spool.tag_uid is None
+
+
+# ---------------------------------------------------------------------------
+# Deterministic re-bind (tag already known)
+# ---------------------------------------------------------------------------
+
+class TestReBind:
+    def test_known_tag_rebinds_to_new_slot(self, session):
+        _mk_printer(session)
+        spool = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF")
+        spool.tag_uid = REAL_TAG
+        spool.ams_slot = "My Printer:ams1_tray1"
+        session.commit()
+
+        # Same physical spool now loaded in tray 3
+        detail = {"ams1_tray3": {"material": "PLA", "color": "#FFFFFF", "tag_uid": REAL_TAG, "remain": 80}}
+        changed = _run_autobind(session, detail)
+
+        session.refresh(spool)
+        assert changed == 1
+        assert spool.ams_slot == "My Printer:ams1_tray3"
+
+    def test_known_tag_same_slot_no_change(self, session):
+        _mk_printer(session)
+        spool = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF")
+        spool.tag_uid = REAL_TAG
+        spool.ams_slot = "My Printer:ams1_tray1"
+        session.commit()
+
+        detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF", "tag_uid": REAL_TAG, "remain": 80}}
+        changed = _run_autobind(session, detail)
+        session.refresh(spool)
+        assert changed == 0
+        assert spool.ams_slot == "My Printer:ams1_tray1"
+
+    def test_rebind_clears_slot_from_other_spool(self, session):
+        """A tag_uid is unique → a second spool wrongly on the slot is cleared."""
+        _mk_printer(session)
+        bound = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF")
+        bound.tag_uid = REAL_TAG
+        session.commit()
+        squatter = _mk_spool(session, material="PLA", color_name="Blue", color_hex="#0000FF")
+        squatter.ams_slot = "My Printer:ams1_tray5"
+        session.commit()
+
+        detail = {"ams1_tray5": {"material": "PLA", "color": "#FFFFFF", "tag_uid": REAL_TAG, "remain": 70}}
+        changed = _run_autobind(session, detail)
+
+        session.refresh(bound); session.refresh(squatter)
+        assert changed == 1
+        assert bound.ams_slot == "My Printer:ams1_tray5"
+        assert squatter.ams_slot is None
+
+
+# ---------------------------------------------------------------------------
+# Inactive printer / no data
+# ---------------------------------------------------------------------------
+
+class TestGuards:
+    def test_inactive_printer_no_bind(self, session):
+        _mk_printer(session, active=False)
+        spool = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF")
+        detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF", "tag_uid": REAL_TAG, "remain": 90}}
+        changed = _run_autobind(session, detail)
+        session.refresh(spool)
+        assert changed == 0
+        assert spool.tag_uid is None
+
+    def test_no_real_tag_short_circuits(self, session):
+        _mk_printer(session)
+        _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF")
+        detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF", "tag_uid": ZERO_TAG}}
+        assert _run_autobind(session, detail) == 0
+
+
+# ---------------------------------------------------------------------------
+# Assign endpoint persists tag_uid
+# ---------------------------------------------------------------------------
+
+class TestAssignPersistsTagUid:
+    def test_assign_stores_tray_tag_uid_on_spool(self, client):
+        r = client.post("/api/printers", json={"name": "My Printer", "bambu_serial": SERIAL})
+        printer = r.json()
+        spool = client.post("/api/spools", json=make_spool_payload()).json()
+
+        detail = {"ams1_tray1": {"material": "PLA", "color": "#FF0000", "tag_uid": REAL_TAG, "remain": 90}}
+        with patch("app.bambu_cloud_client.get_ams_detail_for_serial", return_value=detail), \
+             patch("app.bambu_cloud_client.register_printer"), \
+             patch("app.ha_publisher.trigger"):
+            resp = client.post(
+                f"/api/printers/{printer['id']}/ams/ams1_tray1/assign",
+                json={"spool_id": spool["id"]},
+            )
+        assert resp.status_code == 200
+        got = client.get(f"/api/spools/{spool['id']}").json()
+        assert got["ams_slot"] == "My Printer:ams1_tray1"
+        assert got["tag_uid"] == REAL_TAG
+
+    def test_assign_ignores_zero_tag(self, client):
+        r = client.post("/api/printers", json={"name": "My Printer", "bambu_serial": SERIAL})
+        printer = r.json()
+        spool = client.post("/api/spools", json=make_spool_payload()).json()
+
+        detail = {"ams1_tray1": {"material": "PLA", "color": "#FF0000", "tag_uid": ZERO_TAG, "remain": 90}}
+        with patch("app.bambu_cloud_client.get_ams_detail_for_serial", return_value=detail), \
+             patch("app.bambu_cloud_client.register_printer"), \
+             patch("app.ha_publisher.trigger"):
+            resp = client.post(
+                f"/api/printers/{printer['id']}/ams/ams1_tray1/assign",
+                json={"spool_id": spool["id"]},
+            )
+        assert resp.status_code == 200
+        got = client.get(f"/api/spools/{spool['id']}").json()
+        assert got["tag_uid"] is None
