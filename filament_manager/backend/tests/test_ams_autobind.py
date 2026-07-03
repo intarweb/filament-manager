@@ -75,11 +75,29 @@ class TestIsRealTagUid:
 
 
 # ---------------------------------------------------------------------------
-# First bind (single unambiguous candidate)
+# Exact RFID match ONLY — never guess by material/colour
 # ---------------------------------------------------------------------------
 
-class TestFirstBind:
-    def test_single_material_color_candidate_is_bound(self, session):
+class TestExactMatch:
+    def test_exact_tag_match_binds(self, session):
+        """A spool whose tag_uid was populated (from cloud sync or manual assign)
+        binds when that exact RFID appears in a tray."""
+        _mk_printer(session)
+        spool = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF")
+        spool.tag_uid = REAL_TAG
+        session.commit()
+        detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF", "tag_uid": REAL_TAG, "remain": 90}}
+
+        changed = _run_autobind(session, detail)
+
+        session.refresh(spool)
+        assert changed == 1
+        assert spool.ams_slot == "My Printer:ams1_tray1"
+
+    def test_material_color_match_does_NOT_bind(self, session):
+        """Regression: a spool matching material+colour but with NO tag_uid must
+        NEVER be auto-bound. Material/colour identifies a product, not a physical
+        spool — guessing by it stamped the wrong RFID onto records (the bug)."""
         _mk_printer(session)
         spool = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF")
         detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF", "tag_uid": REAL_TAG, "remain": 90}}
@@ -87,36 +105,27 @@ class TestFirstBind:
         changed = _run_autobind(session, detail)
 
         session.refresh(spool)
-        assert changed == 1
-        assert spool.tag_uid == REAL_TAG
-        assert spool.ams_slot == "My Printer:ams1_tray1"
-
-    def test_ambiguous_multiple_candidates_not_bound(self, session):
-        """Two identical white PLA spools → ambiguous → nothing bound (safety)."""
-        _mk_printer(session)
-        s1 = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF")
-        s2 = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF")
-        detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF", "tag_uid": REAL_TAG, "remain": 90}}
-
-        changed = _run_autobind(session, detail)
-
-        session.refresh(s1); session.refresh(s2)
-        assert changed == 0
-        assert s1.tag_uid is None and s2.tag_uid is None
-        assert s1.ams_slot is None and s2.ams_slot is None
-
-    def test_zero_candidates_not_bound(self, session):
-        _mk_printer(session)
-        spool = _mk_spool(session, material="PETG", color_name="Black", color_hex="#000000")
-        detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF", "tag_uid": REAL_TAG, "remain": 90}}
-
-        changed = _run_autobind(session, detail)
-        session.refresh(spool)
         assert changed == 0
         assert spool.tag_uid is None
+        assert spool.ams_slot is None
+
+    def test_unknown_tag_is_noop(self, session):
+        """A real tag matching no spool's tag_uid → nothing happens, no error."""
+        _mk_printer(session)
+        spool = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF")
+        spool.tag_uid = REAL_TAG_2  # a DIFFERENT physical spool
+        session.commit()
+        detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF", "tag_uid": REAL_TAG, "remain": 90}}
+
+        changed = _run_autobind(session, detail)
+
+        session.refresh(spool)
+        assert changed == 0
+        assert spool.ams_slot is None
 
     def test_zero_tag_is_skipped(self, session):
-        """Third-party spool (all-zeros tag) → never auto-bound."""
+        """Third-party spool (all-zeros tag) → never auto-bound, even with an
+        exact material/colour spool present."""
         _mk_printer(session)
         spool = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF")
         detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF", "tag_uid": ZERO_TAG, "remain": 90}}
@@ -126,32 +135,6 @@ class TestFirstBind:
         assert changed == 0
         assert spool.tag_uid is None
         assert spool.ams_slot is None
-
-    def test_prefers_bambu_spool_id_and_color(self, session):
-        """When tray carries a bambu_spool_id it disambiguates two same-material spools."""
-        _mk_printer(session)
-        s1 = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF",
-                       bambu_spool_id="111")
-        s2 = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF",
-                       bambu_spool_id="222")
-        detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF",
-                                 "bambu_spool_id": "222", "tag_uid": REAL_TAG, "remain": 90}}
-
-        changed = _run_autobind(session, detail)
-        session.refresh(s1); session.refresh(s2)
-        assert changed == 1
-        assert s2.tag_uid == REAL_TAG
-        assert s1.tag_uid is None
-
-    def test_empty_stock_spool_not_a_candidate(self, session):
-        _mk_printer(session)
-        spool = _mk_spool(session, material="PLA", color_name="White", color_hex="#FFFFFF",
-                          current_weight_g=0.0)
-        detail = {"ams1_tray1": {"material": "PLA", "color": "#FFFFFF", "tag_uid": REAL_TAG, "remain": 0}}
-        changed = _run_autobind(session, detail)
-        session.refresh(spool)
-        assert changed == 0
-        assert spool.tag_uid is None
 
 
 # ---------------------------------------------------------------------------
@@ -266,3 +249,26 @@ class TestAssignPersistsTagUid:
         assert resp.status_code == 200
         got = client.get(f"/api/spools/{spool['id']}").json()
         assert got["tag_uid"] is None
+
+
+# ---------------------------------------------------------------------------
+# Cloud RFID capture (filament_sync._extract_cloud_tag_uid) — what makes it automatic
+# ---------------------------------------------------------------------------
+
+class TestCloudRfidCapture:
+    @pytest.mark.parametrize("record,expected", [
+        ({"rfid": REAL_TAG}, REAL_TAG),
+        ({"tagUid": REAL_TAG}, REAL_TAG),
+        ({"tag_uid": REAL_TAG}, REAL_TAG),
+        ({"filamentTagUid": REAL_TAG}, REAL_TAG),
+        ({"tray_uid": REAL_TAG}, REAL_TAG),
+        ({"RFID": REAL_TAG}, REAL_TAG),
+        ({"id": "123", "filamentType": "PLA"}, None),        # no RFID key present
+        ({"rfid": ZERO_TAG}, None),                          # all-zeros → not a real tag
+        ({"rfid": ""}, None),                                # empty
+        ({"rfid": "   "}, None),                             # whitespace only
+        ({"rfid": None, "tagUid": REAL_TAG}, REAL_TAG),      # first key null → next wins
+    ])
+    def test_extract_cloud_tag_uid(self, record, expected):
+        from app.routers.filament_sync import _extract_cloud_tag_uid
+        assert _extract_cloud_tag_uid(record) == expected

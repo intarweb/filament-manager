@@ -11,21 +11,21 @@ spool even when the user owns many spools of the same material + colour.
 ``ams_slot`` is stored in the ``"{printer_name}:{slot_key}"`` form (see
 ``routers/printers.py``) — this module writes that same full-key form.
 
-SAFETY — never auto-bind ambiguously
-------------------------------------
-The only auto-actions taken here are:
+SAFETY — EXACT RFID identity only, never guess
+-----------------------------------------------
+The only auto-action taken here is a deterministic bind by physical RFID: a
+tray's real ``tag_uid`` is matched against ``Spool.tag_uid`` and, on an EXACT
+hit, that spool's ``ams_slot`` is moved to the current tray. A spool's
+``tag_uid`` is populated from the authoritative Bambu Cloud filament record
+during sync (see ``routers/filament_sync``) or via the manual "Assign spool"
+action in the UI.
 
-  (a) deterministic re-bind: a tag_uid we've already bound to a spool re-appears
-      in a tray → move that spool's ams_slot to the current tray, and
-  (b) single-unambiguous first bind: a never-seen tag_uid whose material+colour
-      (or bambu_spool_id+colour) matches EXACTLY ONE not-yet-tag-bound spool.
-
-Zero or multiple candidates → we do nothing and leave the tray for a one-time
-manual "Assign spool" confirm in the UI (which then stores the tag_uid via the
-assign endpoint, upgrading it to case (a) for all future loads).
-
-This guarantees auto-deduct can never deduct from the wrong physical spool even
-if this feature ships before review.
+We NEVER bind by material / colour / bambu_spool_id — those identify a
+*product*, not a *physical spool*, so guessing by them can (and did) stamp a
+tray's RFID onto the wrong record and deduct from the wrong spool. An unknown
+tag (no spool carries it) is left untouched for a one-time manual "Assign
+spool" confirm, which stores the tag_uid and upgrades all future loads to the
+exact-match path.
 """
 from __future__ import annotations
 
@@ -58,50 +58,6 @@ def _is_real_tag_uid(tag_uid) -> bool:
     return True
 
 
-def _find_first_bind_candidate(db: Session, slot_info: dict) -> Spool | None:
-    """Find the single unambiguous spool to first-bind to a tray.
-
-    Match among spools that are NOT already tag_uid-bound, by:
-      1. (bambu_spool_id AND colour) when the tray carries a bambu_spool_id, else
-      2. (material AND colour).
-
-    Colour comes from the AMS tray cache as ``"#RRGGBB"``; we compare
-    case-insensitively against the spool's ``color_hex``. Returns the spool only
-    when EXACTLY ONE candidate matches; ``None`` for zero or multiple.
-    """
-    material = (slot_info.get("material") or "").strip()
-    color = (slot_info.get("color") or "").strip()
-    bambu_spool_id = slot_info.get("bambu_spool_id")
-
-    if not color:
-        return None  # colour is required for a safe first bind
-
-    # Only consider spools that have some stock left and are not archived — a
-    # physically loaded spool is an active one.
-    base = (
-        db.query(Spool)
-        .filter(Spool.tag_uid.is_(None))
-        .filter(Spool.archived == False)  # noqa: E712
-        .filter(Spool.current_weight_g > 0)
-    )
-
-    def _by_color(q):
-        # Case-insensitive hex compare (SQLite LIKE is case-insensitive for ASCII).
-        return q.filter(Spool.color_hex.ilike(color))
-
-    candidates: list[Spool] = []
-    if bambu_spool_id:
-        candidates = _by_color(
-            base.filter(Spool.bambu_spool_id == str(bambu_spool_id))
-        ).all()
-    if not candidates and material:
-        candidates = _by_color(base.filter(Spool.material == material)).all()
-
-    if len(candidates) == 1:
-        return candidates[0]
-    return None
-
-
 def _clear_slot_from_others(db: Session, full_key: str, slot_key: str, keep_spool_id: int | None) -> None:
     """Ensure no OTHER spool claims this AMS slot (a tray holds one spool).
 
@@ -132,32 +88,21 @@ def _autobind_for_printer(db: Session, printer: PrinterConfig, detail: dict[str,
         tag_uid = str(tag_uid).strip()
         full_key = f"{printer.name}:{slot_key}"
 
-        # (a) Deterministic re-bind: this physical spool is already known.
+        # Exact RFID identity match ONLY. The spool's tag_uid is populated from
+        # the authoritative Bambu Cloud filament record during sync (see
+        # routers/filament_sync) or via the manual "Assign spool" action — never
+        # guessed from material/colour, which is a product, not a physical spool.
         bound = db.query(Spool).filter(Spool.tag_uid == tag_uid).first()
-        if bound is not None:
-            if bound.ams_slot != full_key:
-                _clear_slot_from_others(db, full_key, slot_key, keep_spool_id=bound.id)
-                log.info(
-                    "AMS auto-bind: tag_uid %s → spool #%d re-bound %s → %s",
-                    tag_uid, bound.id, bound.ams_slot, full_key,
-                )
-                bound.ams_slot = full_key
-                changed += 1
-            continue
-
-        # (b) First bind: never-seen tag_uid → single unambiguous candidate only.
-        candidate = _find_first_bind_candidate(db, slot_info)
-        if candidate is None:
-            continue  # zero or multiple → leave for manual assignment
-        _clear_slot_from_others(db, full_key, slot_key, keep_spool_id=candidate.id)
-        candidate.tag_uid = tag_uid
-        candidate.ams_slot = full_key
-        changed += 1
-        log.info(
-            "AMS auto-bind: first bind tag_uid %s → spool #%d (%s %s %s) at %s",
-            tag_uid, candidate.id, candidate.brand, candidate.material,
-            candidate.color_name, full_key,
-        )
+        if bound is None:
+            continue  # unknown physical spool → leave for manual "Assign spool"
+        if bound.ams_slot != full_key:
+            _clear_slot_from_others(db, full_key, slot_key, keep_spool_id=bound.id)
+            log.info(
+                "AMS auto-bind: tag_uid %s → spool #%d re-bound %s → %s",
+                tag_uid, bound.id, bound.ams_slot, full_key,
+            )
+            bound.ams_slot = full_key
+            changed += 1
 
     return changed
 

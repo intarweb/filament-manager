@@ -158,6 +158,33 @@ def _local_to_cloud_body(spool: Spool) -> dict:
     }
 
 
+# ── Cloud RFID capture ──────────────────────────────────────────────────────────
+
+# Bambu Cloud's field name for a spool's physical RFID tag_uid is unconfirmed and
+# has varied across API versions, so we probe several candidate keys (inspect the
+# live shape via GET /api/bambu-cloud/filaments-raw). First non-empty, non-all-zeros
+# wins. Capturing this onto Spool.tag_uid is what lets AMS auto-bind match a loaded
+# tray to the right physical spool by EXACT RFID — no material/colour guessing.
+_RFID_KEYS = ("rfid", "tagUid", "tag_uid", "filamentTagUid", "tray_uid", "RFID")
+
+
+def _extract_cloud_tag_uid(cloud: dict) -> str | None:
+    """Best-effort pull of a physical RFID tag_uid from a cloud filament record.
+
+    Returns a cleaned string, or ``None`` for empty / all-zeros / absent (mirrors
+    ams_autobind._is_real_tag_uid so we never store a non-identifying tag).
+    """
+    for key in _RFID_KEYS:
+        val = cloud.get(key)
+        if val is None:
+            continue
+        s = str(val).strip()
+        if not s or set(s) <= {"0"}:
+            continue
+        return s
+    return None
+
+
 # ── Match scoring ──────────────────────────────────────────────────────────────
 
 def _match_score(local: Spool, cloud: dict) -> tuple[int, str]:
@@ -520,6 +547,25 @@ async def apply_sync(body: ApplySyncRequest, db: Session = Depends(get_db)):
         except Exception as exc:
             log.warning("apply: import error for cloud=%s: %s", cloud_id, exc)
             errors += 1
+
+    # 2b. Backfill the physical RFID tag_uid from the authoritative cloud record
+    #     onto every linked spool missing it (just-matched, just-imported, and any
+    #     previously-linked spool). This is what makes AMS auto-bind automatic: the
+    #     record self-identifies by exact RFID, so no manual "Assign spool" tap is
+    #     needed once the cloud provides the tag.
+    db.flush()  # ensure just-imported spools are queryable below
+    for spool in (
+        db.query(Spool)
+        .filter(Spool.bambu_spool_id.isnot(None))
+        .filter(Spool.tag_uid.is_(None))
+        .all()
+    ):
+        cloud = cloud_by_id.get(spool.bambu_spool_id)
+        if not cloud:
+            continue
+        tag = _extract_cloud_tag_uid(cloud)
+        if tag:
+            spool.tag_uid = tag
 
     # 3. Push local → cloud (create cloud records for local-only spools)
     for local_id in body.push_to_cloud:
