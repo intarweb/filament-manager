@@ -56,6 +56,7 @@ class SpoolUpdate(BaseModel):
     article_number: str | None = None
     last_dried_at: datetime | None = None
     ams_slot: str | None = None
+    tag_uid: str | None = None
     notes: str | None = None
     archived: bool | None = None
 

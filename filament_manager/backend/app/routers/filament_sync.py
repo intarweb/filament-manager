@@ -187,24 +187,20 @@ def _bind_ams_slots_from_cloud(db: Session, cloud_by_id: dict[str, dict]) -> Non
     """Set ``ams_slot`` on linked spools directly from the cloud AMS position.
 
     Deterministic and RFID-free: the cloud is authoritative for which tray each
-    spool sits in. We can only attribute a slot to a printer when there is
-    exactly ONE active printer (the cloud filament record does not name the
-    device); with several we skip rather than guess — never bind ambiguously.
+    spool sits in AND names the owning printer via ``devId`` (the printer
+    serial). Each in-printer spool is attributed to the tracked printer whose
+    ``bambu_serial`` matches ``devId`` — precise even across multiple printers; a
+    spool loaded on an untracked printer is skipped, never bound ambiguously.
     """
-    active = (
-        db.query(PrinterConfig)
+    printers_by_serial = {
+        p.bambu_serial: p
+        for p in db.query(PrinterConfig)
         .filter(PrinterConfig.is_active == True)  # noqa: E712
         .all()
-    )
-    if len(active) != 1:
-        if active:
-            log.info(
-                "filament sync: %d active printers — skipping cloud-AMS slot bind "
-                "(cloud record does not name the device); manual assign only",
-                len(active),
-            )
+        if p.bambu_serial
+    }
+    if not printers_by_serial:
         return
-    printer = active[0]
 
     for spool in db.query(Spool).filter(Spool.bambu_spool_id.isnot(None)).all():
         cloud = cloud_by_id.get(spool.bambu_spool_id)
@@ -213,6 +209,9 @@ def _bind_ams_slots_from_cloud(db: Session, cloud_by_id: dict[str, dict]) -> Non
         slot_key = _cloud_ams_slot_key(cloud)
         if slot_key is None:
             continue
+        printer = printers_by_serial.get(str(cloud.get("devId") or ""))
+        if printer is None:
+            continue  # spool loaded on a printer we don't track → skip
         full_key = f"{printer.name}:{slot_key}"
         if spool.ams_slot == full_key:
             continue

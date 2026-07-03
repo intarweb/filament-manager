@@ -274,28 +274,43 @@ class TestCloudSlotKey:
 
 
 class TestCloudSlotBind:
-    def test_binds_when_single_active_printer(self, session):
+    def test_binds_by_devid_match(self, session):
         from app.routers.filament_sync import _bind_ams_slots_from_cloud
-        _mk_printer(session)  # one active printer "My Printer"
+        _mk_printer(session)  # "My Printer", serial SERIAL
         spool = _mk_spool(session, material="PLA")
         spool.bambu_spool_id = "c1"
         session.commit()
-        cloud_by_id = {"c1": {"id": "c1", "inPrinter": True, "amsId": 1, "slotId": 1}}
+        cloud_by_id = {"c1": {"id": "c1", "inPrinter": True, "amsId": 1, "slotId": 1, "devId": SERIAL}}
 
         _bind_ams_slots_from_cloud(session, cloud_by_id)
         session.commit()
         session.refresh(spool)
         assert spool.ams_slot == "My Printer:ams2_tray2"
 
-    def test_skips_when_multiple_printers(self, session):
-        """Ambiguous printer attribution → never guess (mirrors the whole fix)."""
+    def test_binds_correct_printer_when_multiple(self, session):
+        """devId scopes each bind to the owning printer — precise, no guard needed."""
         from app.routers.filament_sync import _bind_ams_slots_from_cloud
-        _mk_printer(session, name="P1", serial="01P00A000000001")
-        _mk_printer(session, name="P2", serial="01P00A000000002")
+        _mk_printer(session, name="Garage", serial="AAA")
+        _mk_printer(session, name="Office", serial="BBB")
         spool = _mk_spool(session, material="PLA")
         spool.bambu_spool_id = "c1"
         session.commit()
-        cloud_by_id = {"c1": {"id": "c1", "inPrinter": True, "amsId": 1, "slotId": 1}}
+        # ABS-shaped record (amsId 128 → ams129) loaded on the Office printer
+        cloud_by_id = {"c1": {"id": "c1", "inPrinter": True, "amsId": 128, "slotId": 0, "devId": "BBB"}}
+
+        _bind_ams_slots_from_cloud(session, cloud_by_id)
+        session.commit()
+        session.refresh(spool)
+        assert spool.ams_slot == "Office:ams129_tray1"
+
+    def test_skips_untracked_device(self, session):
+        """A spool loaded on a printer we don't track is left alone (never guess)."""
+        from app.routers.filament_sync import _bind_ams_slots_from_cloud
+        _mk_printer(session, serial="AAA")
+        spool = _mk_spool(session, material="PLA")
+        spool.bambu_spool_id = "c1"
+        session.commit()
+        cloud_by_id = {"c1": {"id": "c1", "inPrinter": True, "amsId": 1, "slotId": 1, "devId": "UNKNOWN"}}
 
         _bind_ams_slots_from_cloud(session, cloud_by_id)
         session.commit()
@@ -308,9 +323,24 @@ class TestCloudSlotBind:
         spool = _mk_spool(session, material="PLA")
         spool.bambu_spool_id = "c1"
         session.commit()
-        cloud_by_id = {"c1": {"id": "c1", "inPrinter": False, "amsId": 1, "slotId": 1}}
+        cloud_by_id = {"c1": {"id": "c1", "inPrinter": False, "amsId": 1, "slotId": 1, "devId": SERIAL}}
 
         _bind_ams_slots_from_cloud(session, cloud_by_id)
         session.commit()
         session.refresh(spool)
         assert spool.ams_slot is None
+
+
+class TestTagUidManualClear:
+    """SpoolUpdate now carries tag_uid so a stale/wrong stamp can be cleared or
+    corrected via PATCH (previously the field was silently dropped)."""
+    def test_patch_sets_and_clears_tag_uid(self, client):
+        spool = client.post("/api/spools", json=make_spool_payload()).json()
+
+        r = client.patch(f"/api/spools/{spool['id']}", json={"tag_uid": REAL_TAG})
+        assert r.status_code == 200
+        assert r.json()["tag_uid"] == REAL_TAG
+
+        r = client.patch(f"/api/spools/{spool['id']}", json={"tag_uid": None})
+        assert r.status_code == 200
+        assert r.json()["tag_uid"] is None
